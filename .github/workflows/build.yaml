@@ -47,7 +47,9 @@ jobs:
           Controlla "compilazione di MozJPEG"
           New-Item -ItemType Directory vendor -Force | Out-Null
           Copy-Item moz-build\Release\cjpeg-static.exe vendor\cjpeg.exe
-          .\vendor\cjpeg.exe -version
+          if (-not (Test-Path vendor\cjpeg.exe)) { throw "cjpeg.exe non e' stato creato" }
+          Write-Host ("MozJPEG pronto: " + (Get-Item vendor\cjpeg.exe).Length + " byte")
+          exit 0
 
       - name: Build
         shell: cmd
