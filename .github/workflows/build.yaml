@@ -27,16 +27,27 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          function Controlla($cosa) { if ($LASTEXITCODE -ne 0) { throw "ERRORE in: $cosa (codice $LASTEXITCODE)" } }
           choco install nasm -y --no-progress
-          "C:\Program Files\NASM" | Out-File -Append -Encoding ascii $env:GITHUB_PATH
+          Controlla "installazione di NASM"
           $env:PATH = "C:\Program Files\NASM;$env:PATH"
           Invoke-WebRequest https://github.com/mozilla/mozjpeg/archive/refs/tags/v4.1.1.tar.gz -OutFile moz.tar.gz
           tar -xzf moz.tar.gz
-          cmake -S mozjpeg-4.1.1 -B moz-build -A x64 -DENABLE_SHARED=0 -DPNG_SUPPORTED=0 -DWITH_JPEG8=0
+          Controlla "estrazione del sorgente"
+          cmake --version
+          # CMAKE_POLICY_VERSION_MINIMUM: MozJPEG chiede CMake 2.8, che il CMake 4 dei runner non accetta piu'
+          cmake -S mozjpeg-4.1.1 -B moz-build -A x64 -DENABLE_SHARED=0 -DPNG_SUPPORTED=0 -DWITH_JPEG8=0 -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Configurazione con NASM fallita: riprovo senza SIMD (un po' piu' lento ma funziona)"
+            Remove-Item moz-build -Recurse -Force -ErrorAction SilentlyContinue
+            cmake -S mozjpeg-4.1.1 -B moz-build -A x64 -DENABLE_SHARED=0 -DPNG_SUPPORTED=0 -DWITH_JPEG8=0 -DWITH_SIMD=0 -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+            Controlla "configurazione di MozJPEG"
+          }
           cmake --build moz-build --config Release --target cjpeg-static
-          if ($LASTEXITCODE -ne 0) { throw "compilazione di MozJPEG fallita" }
+          Controlla "compilazione di MozJPEG"
           New-Item -ItemType Directory vendor -Force | Out-Null
           Copy-Item moz-build\Release\cjpeg-static.exe vendor\cjpeg.exe
+          .\vendor\cjpeg.exe -version
 
       - name: Build
         shell: cmd
@@ -50,7 +61,7 @@ jobs:
           "$h  Comprimi-Immagini-Rapido-windows.zip" | Out-File -Encoding ascii Comprimi-Immagini-Rapido-windows.zip.sha256
           "SHA256=$h" >> $env:GITHUB_ENV
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: Comprimi-Immagini-Rapido-windows
           path: |
