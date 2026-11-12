@@ -1,0 +1,18 @@
+# Output di build
+build/
+dist/
+out/
+vendor/
+mozjpeg-*/
+moz-build/
+*.class
+*.jar
+*.ico
+*.zip
+
+# IDE / sistema
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
