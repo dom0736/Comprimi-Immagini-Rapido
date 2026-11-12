@@ -1,1 +1,71 @@
 
+name: Build Comprimi Immagini Rapido
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # MozJPEG (cjpeg.exe) viene compilato dal codice sorgente ufficiale.
+      # Se questo passo fallisce l'app si costruisce lo stesso e usa il JPEG di Java.
+      - name: Compila MozJPEG
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          choco install nasm -y --no-progress
+          "C:\Program Files\NASM" | Out-File -Append -Encoding ascii $env:GITHUB_PATH
+          $env:PATH = "C:\Program Files\NASM;$env:PATH"
+          Invoke-WebRequest https://github.com/mozilla/mozjpeg/archive/refs/tags/v4.1.1.tar.gz -OutFile moz.tar.gz
+          tar -xzf moz.tar.gz
+          cmake -S mozjpeg-4.1.1 -B moz-build -A x64 -DENABLE_SHARED=0 -DPNG_SUPPORTED=0 -DWITH_JPEG8=0
+          cmake --build moz-build --config Release --target cjpeg-static
+          New-Item -ItemType Directory vendor -Force | Out-Null
+          Copy-Item moz-build\Release\cjpeg-static.exe vendor\cjpeg.exe
+
+      - name: Build
+        shell: cmd
+        run: build.bat
+
+      - name: Zip e checksum
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "out\Comprimi Immagini Rapido" -DestinationPath Comprimi-Immagini-Rapido-windows.zip
+          $h = (Get-FileHash Comprimi-Immagini-Rapido-windows.zip -Algorithm SHA256).Hash.ToLower()
+          "$h  Comprimi-Immagini-Rapido-windows.zip" | Out-File -Encoding ascii Comprimi-Immagini-Rapido-windows.zip.sha256
+          "SHA256=$h" >> $env:GITHUB_ENV
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Comprimi-Immagini-Rapido-windows
+          path: |
+            Comprimi-Immagini-Rapido-windows.zip
+            Comprimi-Immagini-Rapido-windows.zip.sha256
+
+      # Con un tag (v1.0.0, v1.1.0, ...) lo zip viene allegato alla Release
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            Comprimi-Immagini-Rapido-windows.zip
+            Comprimi-Immagini-Rapido-windows.zip.sha256
+          body: |
+            Scarica `Comprimi-Immagini-Rapido-windows.zip`, estrailo e apri `Comprimi Immagini Rapido.exe`.
+            Non serve installare Java.
+
+            SHA256: `${{ env.SHA256 }}`
