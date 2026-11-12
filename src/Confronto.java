@@ -12,6 +12,7 @@ import java.awt.Rectangle;
 import java.awt.Shape;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseWheelEvent;
 import java.awt.geom.Arc2D;
 import java.awt.geom.Area;
 import java.awt.geom.Ellipse2D;
@@ -39,6 +40,10 @@ class Confronto extends JComponent {
     private int rw, rh;
     private Rectangle drag;
     private Point inizio;
+    // zoom: zoom=1 mostra l'immagine intera; (zx, zy) è il punto dell'immagine (0..1) al centro della vista
+    private static final double MAX_ZOOM = 10;
+    private double zoom = 1, zx = .5, zy = .5;
+    private Point pan;
     Consumer<Rectangle> onCrop;
     Runnable onReset;
 
@@ -76,6 +81,20 @@ class Confronto extends JComponent {
         MouseAdapter m = new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
+                Rectangle f0 = fit();
+                if (!cropMode && f0 != null && f0.contains(e.getPoint())) {
+                    if (e.getButton() == MouseEvent.BUTTON1 && e.getClickCount() == 2 && zoom > 1) {
+                        azzeraZoom();
+                        return;
+                    }
+                    boolean altro = e.getButton() != MouseEvent.BUTTON1;
+                    boolean lontano = !haRisultato || Math.abs(e.getX() - (f0.x + f0.width * split.get())) >= 26;
+                    if (zoom > 1.001 && (altro || lontano)) { // da ingranditi si sposta l'immagine
+                        pan = e.getPoint();
+                        setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+                        return;
+                    }
+                }
                 if (!SwingUtilities.isLeftMouseButton(e)) return;
                 if (cropMode) {
                     Rectangle f = fit();
@@ -93,6 +112,14 @@ class Confronto extends JComponent {
             public void mouseDragged(MouseEvent e) {
                 Rectangle f = fit();
                 if (f == null) return;
+                if (pan != null) {
+                    zx -= (e.getX() - pan.x) / (f.width * zoom);
+                    zy -= (e.getY() - pan.y) / (f.height * zoom);
+                    pan = e.getPoint();
+                    limitaZoom();
+                    repaint();
+                    return;
+                }
                 if (cropMode) {
                     if (inizio == null) return;
                     Point q = clampImg(e.getPoint());
@@ -105,6 +132,11 @@ class Confronto extends JComponent {
 
             @Override
             public void mouseReleased(MouseEvent e) {
+                if (pan != null) {
+                    pan = null;
+                    mouseMoved(e);
+                    return;
+                }
                 if (cropMode && drag != null && drag.width > 8 && drag.height > 8 && onCrop != null) onCrop.accept(new Rectangle(drag));
                 drag = null;
                 inizio = null;
@@ -116,7 +148,11 @@ class Confronto extends JComponent {
             public void mouseMoved(MouseEvent e) {
                 Rectangle f = fit();
                 boolean sopra = f != null && f.contains(e.getPoint());
-                setCursor(Cursor.getPredefinedCursor(cropMode ? Cursor.CROSSHAIR_CURSOR : sopra && haRisultato ? Cursor.E_RESIZE_CURSOR : Cursor.DEFAULT_CURSOR));
+                boolean vicino = sopra && haRisultato && Math.abs(e.getX() - (f.x + f.width * split.get())) < 26;
+                int cur = cropMode ? Cursor.CROSSHAIR_CURSOR
+                        : sopra && zoom > 1.001 && !vicino ? Cursor.MOVE_CURSOR
+                        : sopra && haRisultato ? Cursor.E_RESIZE_CURSOR : Cursor.DEFAULT_CURSOR;
+                setCursor(Cursor.getPredefinedCursor(cur));
                 if (!cropMode && haRisultato && f != null) {
                     double sx = f.x + f.width * split.get();
                     man.to(Math.abs(e.getX() - sx) < 26 ? .6 : 0, 140);
@@ -127,9 +163,52 @@ class Confronto extends JComponent {
             public void mouseExited(MouseEvent e) {
                 if (drag == null) man.to(0, 220);
             }
+
+            @Override
+            public void mouseWheelMoved(MouseWheelEvent e) {
+                rotella(e);
+            }
         };
         addMouseListener(m);
         addMouseMotionListener(m);
+        addMouseWheelListener(m);
+    }
+
+    // ---------------------------------------------------------------- zoom
+    private void azzeraZoom() {
+        zoom = 1;
+        zx = zy = .5;
+        pan = null;
+        repaint();
+    }
+
+    private void limitaZoom() {
+        zoom = Math.max(1, Math.min(MAX_ZOOM, zoom));
+        double h = .5 / zoom;
+        zx = Math.max(h, Math.min(1 - h, zx));
+        zy = Math.max(h, Math.min(1 - h, zy));
+    }
+
+    /** Dove va disegnata l'immagine intera (più grande di `f` se c'è lo zoom; `f` fa da finestra). */
+    private Rectangle zoomRect(Rectangle f) {
+        limitaZoom();
+        int w = (int) Math.round(f.width * zoom), h = (int) Math.round(f.height * zoom);
+        return new Rectangle((int) Math.round(f.x + f.width / 2.0 - zx * w), (int) Math.round(f.y + f.height / 2.0 - zy * h), w, h);
+    }
+
+    /** Rotella: ingrandisce restando ancorati al punto sotto il mouse. */
+    private void rotella(MouseWheelEvent e) {
+        Rectangle f = fit();
+        if (cropMode || f == null || !f.contains(e.getPoint())) return;
+        double nz = Math.max(1, Math.min(MAX_ZOOM, zoom * Math.pow(1.25, -e.getPreciseWheelRotation())));
+        if (nz == zoom) return;
+        double cx = f.x + f.width / 2.0, cy = f.y + f.height / 2.0;
+        double u = zx + (e.getX() - cx) / (f.width * zoom), v = zy + (e.getY() - cy) / (f.height * zoom);
+        zoom = nz;
+        zx = u - (e.getX() - cx) / (f.width * zoom);
+        zy = v - (e.getY() - cy) / (f.height * zoom);
+        limitaZoom();
+        repaint();
     }
 
     private double vSplit(int x, Rectangle f) {
@@ -142,6 +221,8 @@ class Confronto extends JComponent {
         haRisultato = false;
         caricando = false;
         calcolando = false;
+        zoom = 1;
+        zx = zy = .5;
         crop = null;
         drag = null;
         impostaCropSilenzioso(false);
@@ -174,6 +255,8 @@ class Confronto extends JComponent {
         imgH = h;
         this.crop = crop;
         primo = true;
+        zoom = 1;
+        zx = zy = .5;
         impostaCropSilenzioso(false);
         bCrop.setVisible(true);
         bReset.setVisible(true);
@@ -231,6 +314,7 @@ class Confronto extends JComponent {
     void impostaCrop(boolean v) {
         cropMode = v;
         drag = null;
+        if (v) azzeraZoom();
         vis.jump(.35);
         vis.to(1, 300);
         setCursor(Cursor.getPredefinedCursor(v ? Cursor.CROSSHAIR_CURSOR : Cursor.DEFAULT_CURSOR));
@@ -244,6 +328,7 @@ class Confronto extends JComponent {
 
     void cambiatoCrop(Rectangle nuovo) {
         crop = nuovo;
+        azzeraZoom();
         bReset.setEnabled(nuovo != null);
         if (nuovo != null) calcolando = true;
         repaint();
@@ -389,17 +474,19 @@ class Confronto extends JComponent {
         BufferedImage base = cropMode ? vFull : vOrig;
         g.setColor(p.campo);
         g.fill(clip.getBounds2D());
-        g.drawImage(base, f.x, f.y, f.width, f.height, null);
+        Rectangle z = cropMode ? f : zoomRect(f);
+        if (z.width > f.width) g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        g.drawImage(base, z.x, z.y, z.width, z.height, null);
         double sp = split.get();
         int sx = f.x + (int) Math.round(f.width * sp);
         if (!cropMode && haRisultato && vRis != null) {
             Shape c2 = g.getClip();
             g.clipRect(sx, f.y, f.x + f.width - sx, f.height);
-            if (vPrec != null && fade.get() < 1) g.drawImage(vPrec, f.x, f.y, f.width, f.height, null);
+            if (vPrec != null && fade.get() < 1) g.drawImage(vPrec, z.x, z.y, z.width, z.height, null);
             java.awt.Composite co = g.getComposite();
             float al = vPrec != null ? (float) Math.max(0, Math.min(1, fade.get())) : 1f;
             g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, al * (co instanceof AlphaComposite ? ((AlphaComposite) co).getAlpha() : 1f)));
-            g.drawImage(vRis, f.x, f.y, f.width, f.height, null);
+            g.drawImage(vRis, z.x, z.y, z.width, z.height, null);
             g.setComposite(co);
             g.setClip(c2);
         }
@@ -416,9 +503,20 @@ class Confronto extends JComponent {
             etichetta(g, "Compressa", f.x + f.width - 10, f.y + 10, true, sx, f);
             linea(g, f, sx);
             statistiche(g, f);
+            if (zoom > 1.001) pillolaZoom(g, f);
         } else if (cropMode) {
             etichetta(g, "Trascina per ritagliare", f.x + 10, f.y + 10, false, -1, f);
         }
+    }
+
+    private void pillolaZoom(Graphics2D g, Rectangle f) {
+        String t = Math.round(zoom * 100) + "%";
+        g.setFont(Tema.fb(11.5f));
+        int tw = g.getFontMetrics().stringWidth(t) + 18;
+        g.setColor(new Color(10, 16, 28, 150));
+        g.fill(Gfx.rr(f.x + 10, f.y + f.height - 34, tw, 24, 12));
+        g.setColor(Color.WHITE);
+        g.drawString(t, f.x + 19, f.y + f.height - 18);
     }
 
     private void etichetta(Graphics2D g, String t, int x, int y, boolean destra, int sx, Rectangle f) {

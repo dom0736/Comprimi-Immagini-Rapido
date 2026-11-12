@@ -104,14 +104,14 @@ class Overlay extends JComponent {
         double q = t.get();
         if (q <= 0.001) return;
         Graphics2D g = Gfx.g2(gr);
-        g.setColor(Tema.p.scuro ? new Color(5, 9, 18, (int) (165 * q)) : new Color(28, 38, 70, (int) (105 * q)));
+        g.setColor(Tema.p.scuro ? new Color(5, 9, 18, (int) (110 * q)) : new Color(28, 38, 70, (int) (70 * q)));
         g.fillRect(0, 0, getWidth(), getHeight());
         if (scheda != null) {
             double e = scheda.ent.get();
-            int sh = 18;
+            int sh = 9;
             for (int i = sh; i >= 1; i--) {
-                g.setColor(Gfx.a(new Color(0, 0, 0), (int) ((1 - i / (sh + 1.0)) * (1 - i / (sh + 1.0)) * 70 * e)));
-                g.fill(Gfx.rr(scheda.getX() - i, scheda.getY() - i + 10, scheda.getWidth() + 2 * i, scheda.getHeight() + 2 * i, 22 + i));
+                g.setColor(Gfx.a(new Color(0, 0, 0), (int) ((1 - i / (sh + 1.0)) * (1 - i / (sh + 1.0)) * 26 * e)));
+                g.fill(Gfx.rr(scheda.getX() - i, scheda.getY() - i + 3, scheda.getWidth() + 2 * i, scheda.getHeight() + 2 * i, 22 + i));
             }
         }
         g.dispose();
@@ -209,21 +209,21 @@ class GuidaScheda extends Scheda {
             "# COME SI USA",
             "1. Trascina le immagini (o una cartella intera) nella finestra. Oppure premi «Aggiungi» o Ctrl+V per incollare uno screenshot.",
             "2. Scegli come comprimere: i pulsanti Minima, Leggera, Normale e Nitida impostano insieme qualità e dimensione; con i due cursori puoi regolarle a mano.",
-            "3. Sposta la linea sull'anteprima per confrontare l'originale (a sinistra) con la versione compressa (a destra). Sotto vedi quanto pesa prima e dopo.",
+            "3. Sposta la linea sull'anteprima per confrontare l'originale (a sinistra) con la versione compressa (a destra). Sotto vedi quanto pesa prima e dopo. Con la rotellina del mouse ingrandisci l'anteprima, trascinala per spostarti, doppio clic per tornare alla vista intera.",
             "4. «Comprimi tutto» salva tutte le immagini dell'elenco. «Salva», «Copia file» e «Copia immagine» lavorano solo su quella selezionata.",
             "",
             "# LE QUATTRO QUALITÀ",
             "• Minima: qualità 50, dimensione 30%. Per mandare tante foto in chat o per mail.",
             "• Leggera: qualità 65, dimensione 50%. Per siti e documenti.",
-            "• Normale: qualità 75, dimensione 75%. Va bene quasi sempre.",
+            "• Normale: qualità 75, dimensione 75%. È l'equilibrio consigliato.",
             "• Nitida: qualità 90, dimensione 100%. Peso ridotto senza rimpicciolire la foto.",
             "Se muovi un cursore a mano, nessun pulsante resta acceso: la tua scelta viene ricordata alla prossima apertura.",
             "",
             "# IL FORMATO",
             "Accanto ai cursori scegli il formato del file:",
             "• JPEG: il più leggero per le foto. Usa i cursori Qualità e Dimensione. Se nella cartella «tools» c'è MozJPEG, lo usa da solo e i file sono ancora più piccoli.",
-            "• PNG: senza perdita di qualità e con le trasparenze. Per screenshot, loghi e grafica. Il cursore Qualità non serve e si spegne.",
-            "• PNG 256: come il PNG ma con al massimo 256 colori, molto più leggero (di solito dal 50% al 70% in meno). Ottimo per screenshot e grafica, meno adatto a foto con sfumature.",
+            "• PNG: senza perdita di qualità e con le trasparenze. Per screenshot, loghi e grafica. Il cursore Qualità si spegne (passa il mouse per il motivo): è già al massimo.",
+            "• PNG 256: come il PNG ma con meno colori (il cursore Qualità sceglie quanti, da 16 a 256), molto più leggero (di solito dal 50% al 70% in meno). Ottimo per screenshot e grafica, meno adatto a foto con sfumature.",
             "",
             "# RITAGLIARE",
             "Premi «Ritaglia» e trascina un rettangolo sull'immagine. Premi di nuovo «Ritaglia» per vedere il risultato; «Azzera» toglie il ritaglio. Il ritaglio è per singola immagine e vale anche con «Comprimi tutto». Nell'elenco le immagini ritagliate non cambiano nome.",
@@ -344,13 +344,13 @@ class ImpostazioniScheda extends Scheda {
     private final Finestra f;
     private final Seg tema, dove;
     private final Bott cambia, apri, segnala, chiudi, x;
-    private final Interruttore apriFine, progressivo;
+    private final Interruttore apriFine, progressivo, animazioni;
     private final Anim.Val dim = new Anim.Val(0, this::repaint);
 
     ImpostazioniScheda(Finestra f) {
         this.f = f;
         cw = 580;
-        ch = 590;
+        ch = 620;
         tema = new Seg(new String[]{"Scuro", "Chiaro"}, "chiaro".equals(Cfg.str("tema", "scuro")) ? 1 : 0, 110, i -> f.cambiaTema(i == 1 ? "chiaro" : "scuro"));
         dove = new Seg(new String[]{"Cartella fissa", "Accanto all'originale"}, "accanto".equals(Cfg.str("dove", "fissa")) ? 1 : 0, 0, i -> {
             Cfg.set("dove", i == 1 ? "accanto" : "fissa");
@@ -376,12 +376,18 @@ class ImpostazioniScheda extends Scheda {
             Cfg.salva();
             f.anteprima();
         });
+        animazioni = new Interruttore("Animazioni", "Movimenti e dissolvenze. Spegnile se l'app ti sembra lenta",
+                Cfg.bool("animazioni", false), v -> {
+            Cfg.set("animazioni", v);
+            Cfg.salva();
+            Anim.attive = v;
+        });
         segnala = new Bott("Segnala un problema", "flag", () -> f.segnala());
         segnala.alt = 38;
         chiudi = new Bott("Fatto", null, true, () -> overlay.chiudi());
         chiudi.alt = 38;
         x = bottoneChiudi();
-        for (JComponent c : new JComponent[]{tema, dove, cambia, apri, apriFine, progressivo, segnala, chiudi, x}) add(c);
+        for (JComponent c : new JComponent[]{tema, dove, cambia, apri, apriFine, progressivo, animazioni, segnala, chiudi, x}) add(c);
         aggiornaDim();
     }
 
@@ -402,7 +408,8 @@ class ImpostazioniScheda extends Scheda {
         apri.setBounds(w - m - d2.w, fy, d2.w, 40);
         cambia.setBounds(w - m - d2.w - 8 - d1.w, fy, d1.w, 40);
         apriFine.setBounds(m, 360, w - 2 * m, 54);
-        progressivo.setBounds(m, 422, w - 2 * m, 54);
+        progressivo.setBounds(m, 418, w - 2 * m, 54);
+        animazioni.setBounds(m, 476, w - 2 * m, 54);
         int bw = segnala.getPreferredSize().width;
         segnala.setBounds(m, h - 24 - 38 - 8 - 18, bw, 38);
         int cw2 = 120;

@@ -112,7 +112,7 @@ final class Finestra extends JFrame {
         intestazione = new Intestazione();
         coda = new CodaCard();
         controlli = new ControlliCard();
-        controlli.qualita.setEnabled(formatoCorrente() == 0);
+        aggiornaQualita();
         deb = new Timer(220, e -> {
             salvaScelte();
             anteprima();
@@ -210,10 +210,14 @@ final class Finestra extends JFrame {
         confrontoWrap.setBounds(rx, hh, rw, bodyH - ch - gp);
         controlli.setBounds(rx, hh + bodyH - ch, rw, ch);
         piede.setBounds(0, H - fh, W, fh);
+        // setBounds su un pannello senza layout non fa ridisporre i figli: lo facciamo qui,
+        // altrimenti anteprima e controlli restano con le misure vecchie finché la finestra non si ridisegna (es. alt+tab)
+        for (java.awt.Component c : stage.getComponents()) c.validate();
     }
 
     /** Mostra solo l'immagine: l'elenco si richiude e l'anteprima occupa tutta la larghezza. */
     void soloImmagine() {
+        if (voci.isEmpty()) return;
         voglioSolo = !voglioSolo;
         intestazione.solo.setOn(voglioSolo, true);
         aggiornaFocus();
@@ -240,19 +244,17 @@ final class Finestra extends JFrame {
             }
             intestazione.solo.setOn(voglioSolo, true);
             aggiornaFocus();
+            // Niente schermo intero "esclusivo" (setFullScreenWindow): su Windows nasconde le finestre di
+            // dialogo native (Esplora file) dietro la finestra. Usiamo invece una finestra senza bordi grande
+            // come lo schermo: i dialoghi restano sopra e si copre comunque la barra delle applicazioni.
+            java.awt.Rectangle schermo = d.getDefaultConfiguration().getBounds();
+            if (d.getFullScreenWindow() == this) d.setFullScreenWindow(null);
             dispose();
             setUndecorated(nuovo);
-            if (nuovo && d.isFullScreenSupported()) {
-                d.setFullScreenWindow(this);
-            } else {
-                if (d.getFullScreenWindow() == this) d.setFullScreenWindow(null);
-                if (nuovo) setExtendedState(MAXIMIZED_BOTH);
-                else {
-                    setExtendedState(NORMAL);
-                    if (prima != null) setBounds(prima);
-                }
-                setVisible(true);
-            }
+            setExtendedState(NORMAL);
+            if (nuovo) setBounds(schermo);
+            else if (prima != null) setBounds(prima);
+            setVisible(true);
             pieno = nuovo;
             intestazione.schermo.setOn(nuovo, true);
             TitoloScuro.applica(this);
@@ -266,7 +268,21 @@ final class Finestra extends JFrame {
 
     private void mostraVista() {
         coda.mostra(voci.isEmpty());
+        aggiornaSolo();
         aggiornaFocus();
+    }
+
+    /** Il tasto «solo immagine» ha senso solo se c'è almeno un'immagine: altrimenti sparisce. */
+    private void aggiornaSolo() {
+        boolean ci = !voci.isEmpty();
+        if (!ci && !pieno && voglioSolo) {
+            voglioSolo = false;
+            intestazione.solo.setOn(false, false);
+        }
+        if (intestazione.solo.isVisible() != ci) {
+            intestazione.solo.setVisible(ci);
+            intestazione.repaint();
+        }
     }
 
     // ---------------------------------------------------------------- stato in basso
@@ -277,7 +293,7 @@ final class Finestra extends JFrame {
     // ---------------------------------------------------------------- intestazione
     private final class Intestazione extends Velo {
         final Bott guida = new Bott("Guida", "book", () -> overlay.mostra(new GuidaScheda(), 700, 640, true));
-        final Bott impost = new Bott("Impostazioni", "gear", () -> overlay.mostra(new ImpostazioniScheda(Finestra.this), 580, 590, true));
+        final Bott impost = new Bott("Impostazioni", "gear", () -> overlay.mostra(new ImpostazioniScheda(Finestra.this), 580, 620, true));
         final Bott solo = new Bott("", "panel", () -> soloImmagine());
         final Bott schermo = new Bott("", "expand", () -> schermoIntero());
         private final Anim.Val logo = new Anim.Val(0, this::repaint);
@@ -293,6 +309,7 @@ final class Finestra extends JFrame {
                 add(b);
             }
             solo.setToolTipText("Mostra solo l'immagine (F)");
+            solo.setVisible(false);
             schermo.setToolTipText("Schermo intero (F11)");
             add(guida);
             add(impost);
@@ -302,6 +319,10 @@ final class Finestra extends JFrame {
         @Override
         void entra(int r) {
             super.entra(r);
+            if (!Anim.attive) {
+                logo.jump(1);
+                return;
+            }
             logo.jump(0);
             Anim.dopo(r + 120, () -> logo.to(1, 700));
         }
@@ -562,7 +583,7 @@ final class Finestra extends JFrame {
         }
     }
 
-    static final String[] PRESET_DESC = {"Chat e mail: file piccolissimi", "Siti e documenti", "Va bene quasi sempre", "Pesa meno, senza rimpicciolire"};
+    static final String[] PRESET_DESC = {"Chat e mail: file piccolissimi", "Siti e documenti", "Equilibrio consigliato", "Pesa meno, senza rimpicciolire"};
 
     static int presetDi(int q, int s) {
         for (int i = 0; i < PRESET.length; i++) if (PRESET[i][0] == q && PRESET[i][1] == s) return i;
@@ -582,8 +603,17 @@ final class Finestra extends JFrame {
     }
 
     private void cambioFormato() {
-        controlli.qualita.setEnabled(formatoCorrente() == 0);
+        aggiornaQualita();
         deb.restart();
+    }
+
+    /** Il cursore Qualità vale per JPEG (compressione) e PNG 256 (numero di colori); il PNG normale è senza perdita. */
+    private void aggiornaQualita() {
+        int f = formatoCorrente();
+        controlli.qualita.setEnabled(f != 1);
+        controlli.qualita.setToolTipText(f == 1 ? "Il PNG è senza perdita: la qualità è sempre massima. Scegli JPEG o PNG 256 per regolarla." : null);
+        controlli.qualita.formato = f == 2 ? (v -> Motore.coloriDa(v) + " col.") : (v -> "" + v);
+        controlli.qualita.repaint();
     }
 
     private int formatoCorrente() {
@@ -781,7 +811,27 @@ final class Finestra extends JFrame {
         return KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner() instanceof Cursore;
     }
 
+    private long ultimoF11;
+
+    /** F11 vale ovunque nell'app (anche con Guida, Impostazioni o menu aperti), qualunque cosa abbia il fuoco. */
+    private void installaF11() {
+        KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(e -> {
+            if (e.getID() != KeyEvent.KEY_PRESSED || e.getKeyCode() != KeyEvent.VK_F11 || e.getModifiersEx() != 0) return false;
+            if (!(e.getSource() instanceof java.awt.Component)) return false;
+            java.awt.Window w = e.getSource() instanceof java.awt.Window ? (java.awt.Window) e.getSource()
+                    : SwingUtilities.getWindowAncestor((java.awt.Component) e.getSource());
+            if (w != this && (w == null || w.getOwner() != this)) return false;
+            long ora = System.currentTimeMillis();
+            if (ora - ultimoF11 > 400) { // tenendo premuto il tasto non deve lampeggiare
+                ultimoF11 = ora;
+                schermoIntero();
+            }
+            return true;
+        });
+    }
+
     private void installaScorciatoie() {
+        installaF11();
         int ctrl = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
         scorciatoia("aggiungi", KeyStroke.getKeyStroke(KeyEvent.VK_O, ctrl), () -> {
             if (!overlay.aperto()) scegliFile();
@@ -805,9 +855,6 @@ final class Finestra extends JFrame {
             else if (overlay.puoChiudersiConEsc()) overlay.chiudi();
             else if (!overlay.aperto() && confronto.inCropMode()) confronto.esciDaCrop();
             else if (!overlay.aperto() && pieno) schermoIntero();
-        });
-        scorciatoia("f11", KeyStroke.getKeyStroke(KeyEvent.VK_F11, 0), () -> {
-            if (!overlay.aperto()) schermoIntero();
         });
         scorciatoia("solo", KeyStroke.getKeyStroke(KeyEvent.VK_F, 0), () -> {
             if (!overlay.aperto() && !fuocoSuCursore()) soloImmagine();
@@ -1281,7 +1328,7 @@ final class Finestra extends JFrame {
                 for (VoceCard c : lista.carte) c.repaint();
                 coda.repaint();
                 final boolean annullato = annullaElab;
-                Anim.dopo(annullato ? 100 : 380, () -> overlay.chiudi(() -> {
+                Anim.pausa(annullato ? 100 : 380, () -> overlay.chiudi(() -> {
                     EsitoScheda es = new EsitoScheda((int) ris[0], (int) ris[1], ris[2], ris[3], annullato, Finestra.this::apriUltima);
                     overlay.mostra(es, 520, es.ch, true);
                     if (ris[0] > 0 && Cfg.bool("apri_fine", true)) apriUltima();

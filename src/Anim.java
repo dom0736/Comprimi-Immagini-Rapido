@@ -22,6 +22,9 @@ final class Anim {
         return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
     };
 
+    /** Se false tutto scatta subito, senza movimento (impostazione «Animazioni»). */
+    static boolean attive = Cfg.bool("animazioni", false);
+
     private static final List<Val> VALORI = new ArrayList<>();
     private static final List<BooleanSupplier> CICLI = new ArrayList<>();
     private static final Timer TIMER = new Timer(16, e -> tick());
@@ -69,7 +72,7 @@ final class Anim {
 
         Val to(double v, int ms, Runnable alTermine) {
             fine = alTermine;
-            if (ms <= 0) {
+            if (ms <= 0 || !attive) {
                 jump(v);
                 if (alTermine != null) alTermine.run();
                 return this;
@@ -108,6 +111,11 @@ final class Anim {
 
     /** Fa partire `r` fra `ms` millisecondi (sul thread grafico). */
     static void dopo(int ms, Runnable r) {
+        pausa(attive ? ms : 1, r);
+    }
+
+    /** Come `dopo`, ma aspetta sempre: per le pause che servono davvero, non solo all'effetto. */
+    static void pausa(int ms, Runnable r) {
         Timer t = new Timer(Math.max(1, ms), e -> r.run());
         t.setRepeats(false);
         t.start();

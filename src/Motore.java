@@ -203,8 +203,14 @@ final class Motore {
             }
             return jpeg(rgb, q, progressivo);
         }
-        if (formato == 2) img = Quantizza.a256(img);
+        if (formato == 2) img = Quantizza.aColori(img, coloriDa(q));
         return png(img);
+    }
+
+    /** Qualità 30..95 → colori del PNG 256: 30 = 16 colori, 95 = 256 (crescita esponenziale: i passi sembrano uniformi all'occhio). */
+    static int coloriDa(int q) {
+        double t = Math.max(0, Math.min(1, (q - 30) / 65.0));
+        return (int) Math.round(Math.pow(2, 4 + 4 * t));
     }
 
     // ---------------------------------------------------------------- MozJPEG (programma esterno cjpeg, se presente in "tools")

@@ -347,16 +347,22 @@ class Cursore extends JComponent {
                 man.to(1, 100);
                 requestFocusInWindow();
                 setValore(daX(e.getX()), true, true);
+                if (!Anim.attive) mostrato.jump(grezzo(e.getX()));
             }
 
             @Override
             public void mouseDragged(MouseEvent e) {
-                if (trascina) setValore(daX(e.getX()), false, true);
+                if (trascina) {
+                    // il pallino segue il mouse al pixel; il valore invece resta "a scatti" (passo)
+                    setValore(daX(e.getX()), false, true);
+                    mostrato.jump(grezzo(e.getX()));
+                }
             }
 
             @Override
             public void mouseReleased(MouseEvent e) {
                 trascina = false;
+                mostrato.to(valore, 140);
                 man.to(contains(e.getPoint()) ? .55 : 0, 200);
             }
 
@@ -421,6 +427,11 @@ class Cursore extends JComponent {
 
     private static final int PAD = 11;
 
+    private double grezzo(int x) {
+        double r = (x - PAD) / (double) Math.max(1, getWidth() - 2 * PAD);
+        return min + Math.max(0, Math.min(1, r)) * (max - min);
+    }
+
     private int daX(int x) {
         double r = (x - PAD) / (double) Math.max(1, getWidth() - 2 * PAD);
         return (int) Math.round(min + Math.max(0, Math.min(1, r)) * (max - min));
@@ -440,7 +451,7 @@ class Cursore extends JComponent {
         g.setFont(Tema.f(12f));
         g.setColor(p.mut);
         g.drawString(titolo, PAD - 1, 13);
-        String vs = formato.apply((int) Math.round(mostrato.get()));
+        String vs = formato.apply(trascina ? valore : (int) Math.round(mostrato.get()));
         g.setFont(Tema.fb(13f));
         g.setColor(p.fg);
         g.drawString(vs, (float) (w - PAD + 1 - g.getFontMetrics().stringWidth(vs)), 13);

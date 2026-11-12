@@ -37,6 +37,10 @@ class Velo extends JPanel {
 
     /** Fa ripartire l'animazione di entrata (dopo `ritardo` ms). */
     void entra(int ritardo) {
+        if (!Anim.attive) {
+            vis.jump(1);
+            return;
+        }
         vis.jump(0);
         Anim.dopo(ritardo, () -> vis.to(1, 460));
     }
@@ -426,7 +430,7 @@ class ZonaDrop extends JComponent {
 
     /** Movimento lento, solo mentre la zona si vede: ~30 immagini al secondo bastano, e a riposo il timer si ferma. */
     private void avviaCiclo() {
-        if (attivo) return;
+        if (attivo || !Anim.attive) return;
         attivo = true;
         Anim.ciclo(() -> {
             if (!isShowing()) {

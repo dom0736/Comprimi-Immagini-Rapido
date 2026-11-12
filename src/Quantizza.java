@@ -22,6 +22,11 @@ final class Quantizza {
     }
 
     static BufferedImage a256(BufferedImage src) {
+        return aColori(src, 256);
+    }
+
+    /** Come a256, ma con al massimo `colori` colori (2..256). */
+    static BufferedImage aColori(BufferedImage src, int colori) {
         final int w = src.getWidth(), h = src.getHeight();
         int[] px = src.getRGB(0, 0, w, h, null, 0, w);
         boolean trasp = false;
@@ -39,7 +44,8 @@ final class Quantizza {
             sg[k] += g;
             sb[k] += b;
         }
-        int max = trasp ? 255 : 256;
+        int tetto = Math.max(2, Math.min(256, colori));
+        int max = trasp ? tetto - 1 : tetto;
         int nb = 0;
         for (int k = 0; k < 32768; k++) if (cnt[k] > 0) nb++;
         int[] tutti = new int[nb];
