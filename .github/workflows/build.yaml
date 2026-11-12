@@ -36,11 +36,11 @@ jobs:
           Controlla "estrazione del sorgente"
           cmake --version
           # CMAKE_POLICY_VERSION_MINIMUM: MozJPEG chiede CMake 2.8, che il CMake 4 dei runner non accetta piu'
-          cmake -S mozjpeg-4.1.1 -B moz-build -A x64 -DENABLE_SHARED=0 -DPNG_SUPPORTED=0 -DWITH_JPEG8=0 -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+          cmake -S mozjpeg-4.1.1 -B moz-build -A x64 -DENABLE_SHARED=0 -DPNG_SUPPORTED=0 -DWITH_JPEG8=0 "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
           if ($LASTEXITCODE -ne 0) {
             Write-Host "Configurazione con NASM fallita: riprovo senza SIMD (un po' piu' lento ma funziona)"
             Remove-Item moz-build -Recurse -Force -ErrorAction SilentlyContinue
-            cmake -S mozjpeg-4.1.1 -B moz-build -A x64 -DENABLE_SHARED=0 -DPNG_SUPPORTED=0 -DWITH_JPEG8=0 -DWITH_SIMD=0 -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+            cmake -S mozjpeg-4.1.1 -B moz-build -A x64 -DENABLE_SHARED=0 -DPNG_SUPPORTED=0 -DWITH_JPEG8=0 -DWITH_SIMD=0 "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
             Controlla "configurazione di MozJPEG"
           }
           cmake --build moz-build --config Release --target cjpeg-static
