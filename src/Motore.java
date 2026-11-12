@@ -207,9 +207,9 @@ final class Motore {
         return png(img);
     }
 
-    /** Qualità 30..95 → colori del PNG 256: 30 = 16 colori, 95 = 256 (crescita esponenziale: i passi sembrano uniformi all'occhio). */
+    /** Qualità 0..100 → colori del PNG 256: 0 = 16 colori, 100 = 256 (crescita esponenziale: i passi sembrano uniformi all'occhio). */
     static int coloriDa(int q) {
-        double t = Math.max(0, Math.min(1, (q - 30) / 65.0));
+        double t = Math.max(0, Math.min(1, q / 100.0));
         return (int) Math.round(Math.pow(2, 4 + 4 * t));
     }
 

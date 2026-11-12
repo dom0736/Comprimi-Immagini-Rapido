@@ -1,7 +1,6 @@
 import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
 import javax.swing.UIManager;
-import java.awt.Color;
 
 /**
  * Comprimi Immagini Rapido - comprime, ridimensiona e ritaglia le immagini con anteprima prima/dopo.
@@ -33,7 +32,7 @@ public final class ComprimiImmaginiRapido {
             } catch (Exception ignored) {
             }
             ToolTipManager.sharedInstance().setInitialDelay(500);
-            UIManager.put("ToolTip.background", Color.DARK_GRAY);
+            Tema.applicaTooltip();
             Finestra f = new Finestra();
             finestra[0] = f;
             f.setVisible(true);

@@ -1,3 +1,5 @@
+import javax.swing.BorderFactory;
+import javax.swing.UIManager;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.GraphicsEnvironment;
@@ -94,6 +96,18 @@ final class Tema {
 
     static void imposta(String nome) {
         p = "chiaro".equals(nome) ? CHIARO : SCURO;
+        applicaTooltip();
+    }
+
+    /** Colori dei tooltip presi dal tema dell'app, così il testo ha sempre il giusto contrasto. */
+    static void applicaTooltip() {
+        Color bg = p.scuro ? hex("#0f1622") : hex("#ffffff");
+        UIManager.put("ToolTip.background", bg);
+        UIManager.put("ToolTip.foreground", p.fg);
+        UIManager.put("ToolTip.font", f(12f));
+        UIManager.put("ToolTip.border", BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(p.scuro ? new Color(255, 255, 255, 60) : hex("#b9c3d9"), 1),
+                BorderFactory.createEmptyBorder(3, 7, 3, 7)));
     }
 
     static String nome() {

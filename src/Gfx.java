@@ -179,17 +179,17 @@ final class Gfx {
                 break;
             }
             case "reset": {
-                // freccia circolare antioraria con la punta tangente all'arco
-                double r = .38, a0 = 120, ext = 285;
+                // freccia circolare antioraria: punta simmetrica sull'arco, tutto il disegno centrato sul suo ingombro
+                double r = .34, a0 = 200, ext = 290, L = .25, w = .78;
+                g.translate(-.010, .085);
                 g.draw(new Arc2D.Double(-r, -r, 2 * r, 2 * r, a0, ext, Arc2D.OPEN));
                 double ae = Math.toRadians(a0 + ext);
                 double ex = r * Math.cos(ae), ey = -r * Math.sin(ae);
-                double dx = -Math.sin(ae), dy = -Math.cos(ae);      // direzione di marcia
-                double base = Math.atan2(-dy, -dx), L = .27;
+                double base = Math.atan2(Math.cos(ae), Math.sin(ae));   // direzione opposta a quella di marcia
                 Path2D p = new Path2D.Double();
-                p.moveTo(ex + L * Math.cos(base - .7), ey + L * Math.sin(base - .75));
+                p.moveTo(ex + L * Math.cos(base - w), ey + L * Math.sin(base - w));
                 p.lineTo(ex, ey);
-                p.lineTo(ex + L * Math.cos(base + .7), ey + L * Math.sin(base + .75));
+                p.lineTo(ex + L * Math.cos(base + w), ey + L * Math.sin(base + w));
                 g.draw(p);
                 break;
             }

@@ -463,12 +463,12 @@ final class Finestra extends JFrame {
 
         ControlliCard() {
             setLayout(null);
-            int q = Cfg.intero("qualita", 75, 30, 95), s = Cfg.intero("scala", 75, 5, 100);
+            int q = Cfg.intero("qualita", 75, 0, 100), s = Cfg.intero("scala", 75, 0, 100);
             preset = new Seg(PRESET_NOMI, presetDi(q, s), 0, i -> applicaPreset(i));
             formato = new Scelta(Motore.FORMATI, Motore.note(), Cfg.intero("formato", 0, 0, Motore.FORMATI.length - 1), i -> cambioFormato());
-            qualita = new Cursore("Qualità", 30, 95, 1, q, v -> cambioManuale());
+            qualita = new Cursore("Qualità", 0, 100, 1, q, v -> cambioManuale());
             qualita.formato = v -> "" + v;
-            dimensione = new Cursore("Dimensione", 5, 100, 5, s, v -> cambioManuale());
+            dimensione = new Cursore("Dimensione", 0, 100, 5, s, v -> cambioManuale());
             dimensione.formato = v -> v + "%";
             salva = new Bott("Salva", "save", () -> salvaCorrente(0));
             copiaFile = new Bott("Copia file", "copy", () -> salvaCorrente(1));
@@ -857,7 +857,7 @@ final class Finestra extends JFrame {
             else if (!overlay.aperto() && pieno) schermoIntero();
         });
         scorciatoia("solo", KeyStroke.getKeyStroke(KeyEvent.VK_F, 0), () -> {
-            if (!overlay.aperto() && !fuocoSuCursore()) soloImmagine();
+            if (!overlay.aperto()) soloImmagine(); // F vale anche con il fuoco su un cursore (le frecce no)
         });
     }
 

@@ -434,16 +434,19 @@ class Confronto extends JComponent {
         } else {
             immagini(g, f);
         }
-        if (calcolando && f != null) { // pillola "Calcolo…" in alto a sinistra sull'immagine
+        if (calcolando && f != null) { // pillola "Calcolo…" in alto a destra, sotto l'etichetta "Compressa"
             String t = "Calcolo…";
             g.setFont(Tema.fb(11.5f));
             int tw = g.getFontMetrics().stringWidth(t);
+            int pw = tw + 38;
+            int px = f.x + f.width - 10 - pw;
+            int py = f.y + 10 + (!cropMode && haRisultato ? 34 : 0);
             g.setColor(new Color(10, 16, 28, 160));
-            g.fill(Gfx.rr(f.x + 10, f.y + 10, tw + 38, 26, 13));
+            g.fill(Gfx.rr(px, py, pw, 26, 13));
             g.setColor(Color.WHITE);
             g.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-            g.draw(new Arc2D.Double(f.x + 18, f.y + 17, 12, 12, -rotazione, 270, Arc2D.OPEN));
-            g.drawString(t, (float) (f.x + 36), (float) (f.y + 28));
+            g.draw(new Arc2D.Double(px + 8, py + 7, 12, 12, -rotazione, 270, Arc2D.OPEN));
+            g.drawString(t, (float) (px + 26), (float) (py + 18));
         }
         g.dispose();
     }
@@ -523,7 +526,6 @@ class Confronto extends JComponent {
         g.setFont(Tema.fb(11.5f));
         int tw = g.getFontMetrics().stringWidth(t) + 18;
         int xx = destra ? x - tw : x;
-        if (calcolando && !destra && !cropMode) y += 34; // la pillola "Calcolo…" occupa l'angolo
         if (sx >= 0) { // se la linea passa sopra, l'etichetta sfuma
             double sopra = destra ? (sx > xx ? 1 : 0) : (sx < xx + tw ? 1 : 0);
             if (sopra >= 1) return;
