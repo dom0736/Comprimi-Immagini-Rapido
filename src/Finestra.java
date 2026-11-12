@@ -54,6 +54,7 @@ import java.util.stream.Stream;
 /** Finestra principale: elenco a sinistra, anteprima prima/dopo e controlli a destra. */
 final class Finestra extends JFrame {
     static final String[] PRESET_NOMI = {"Minima", "Leggera", "Normale", "Nitida"};
+    static final int DIM_MIN = 5; // la dimensione non scende sotto il 5%: mai immagini da 1x1 px
     static final int[][] PRESET = {{50, 30}, {65, 50}, {75, 75}, {90, 100}}; // qualità, dimensione %
 
     // ---- stato
@@ -463,12 +464,12 @@ final class Finestra extends JFrame {
 
         ControlliCard() {
             setLayout(null);
-            int q = Cfg.intero("qualita", 75, 0, 100), s = Cfg.intero("scala", 75, 0, 100);
+            int q = Cfg.intero("qualita", 75, 0, 100), s = Cfg.intero("scala", 75, DIM_MIN, 100);
             preset = new Seg(PRESET_NOMI, presetDi(q, s), 0, i -> applicaPreset(i));
             formato = new Scelta(Motore.FORMATI, Motore.note(), Cfg.intero("formato", 0, 0, Motore.FORMATI.length - 1), i -> cambioFormato());
             qualita = new Cursore("Qualità", 0, 100, 1, q, v -> cambioManuale());
             qualita.formato = v -> "" + v;
-            dimensione = new Cursore("Dimensione", 0, 100, 5, s, v -> cambioManuale());
+            dimensione = new Cursore("Dimensione", DIM_MIN, 100, 5, s, v -> cambioManuale());
             dimensione.formato = v -> v + "%";
             salva = new Bott("Salva", "save", () -> salvaCorrente(0));
             copiaFile = new Bott("Copia file", "copy", () -> salvaCorrente(1));

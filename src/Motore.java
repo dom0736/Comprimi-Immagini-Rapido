@@ -178,6 +178,8 @@ final class Motore {
     }
     static final String[] ESTENSIONI = {".jpg", ".png", ".png"};
 
+    static final int LATO_MIN = 16; // pixel minimi del lato corto della foto
+
     /** Ritaglia, ridimensiona e codifica in JPEG. */
     static byte[] render(BufferedImage src, Rectangle crop, int pct, int q, boolean progressivo) throws IOException {
         return render(src, crop, pct, q, progressivo, 0);
@@ -186,8 +188,11 @@ final class Motore {
     /** Ritaglia, ridimensiona e codifica: formato 0 = JPEG, 1 = PNG, 2 = PNG a 256 colori. */
     static byte[] render(BufferedImage src, Rectangle crop, int pct, int q, boolean progressivo, int formato) throws IOException {
         BufferedImage img = regione(src, crop);
-        int w = Math.max(1, Math.round(img.getWidth() * pct / 100f));
-        int h = Math.max(1, Math.round(img.getHeight() * pct / 100f));
+        // la foto non scende mai sotto LATO_MIN px sul lato corto (mai 1x1), né ingrandisce l'originale
+        int lato = Math.min(img.getWidth(), img.getHeight());
+        float k = Math.max(pct / 100f, Math.min(LATO_MIN, lato) / (float) Math.max(1, lato));
+        int w = Math.max(1, Math.round(img.getWidth() * k));
+        int h = Math.max(1, Math.round(img.getHeight() * k));
         if (formato == 0) img = rgb(img);
         else if (img.getType() != BufferedImage.TYPE_INT_ARGB && img.getType() != BufferedImage.TYPE_INT_RGB) img = argb(img);
         if (w != img.getWidth() || h != img.getHeight()) img = Gfx.scala(img, w, h);

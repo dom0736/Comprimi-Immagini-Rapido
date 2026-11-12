@@ -315,6 +315,7 @@ class Cursore extends JComponent {
     private final Anim.Val mostrato = new Anim.Val(0, this::repaint);
     private final Anim.Val man = new Anim.Val(0, this::repaint);
     private boolean trascina;
+    private boolean fuoriPasso; // dopo il rilascio il pallino resta dove l'hai lasciato (il valore è già a passo)
     IntConsumer onCambio;
     IntFunction<String> formato = v -> "" + v;
     String suffissoDesc = "";
@@ -362,7 +363,8 @@ class Cursore extends JComponent {
             @Override
             public void mouseReleased(MouseEvent e) {
                 trascina = false;
-                mostrato.to(valore, 140);
+                // niente scatto indietro: il pallino resta dove l'hai lasciato, il valore è già quello nuovo
+                fuoriPasso = Math.abs(mostrato.get() - valore) > .01;
                 man.to(contains(e.getPoint()) ? .55 : 0, 200);
             }
 
@@ -418,6 +420,7 @@ class Cursore extends JComponent {
         v = Math.max(min, Math.min(max, v));
         v = min + Math.round((v - min) / (float) passo) * passo;
         v = Math.min(max, v);
+        fuoriPasso = false;
         boolean cambia = v != valore;
         valore = v;
         mostrato.to(v, anim ? 260 : 0);
@@ -451,7 +454,7 @@ class Cursore extends JComponent {
         g.setFont(Tema.f(12f));
         g.setColor(p.mut);
         g.drawString(titolo, PAD - 1, 13);
-        String vs = formato.apply(trascina ? valore : (int) Math.round(mostrato.get()));
+        String vs = formato.apply(trascina || fuoriPasso ? valore : (int) Math.round(mostrato.get()));
         g.setFont(Tema.fb(13f));
         g.setColor(p.fg);
         g.drawString(vs, (float) (w - PAD + 1 - g.getFontMetrics().stringWidth(vs)), 13);
