@@ -206,7 +206,7 @@ final class Finestra extends JFrame {
         int qe = (int) Math.round(qw * (1 - f));
         coda.setVisible(qe > 24);
         coda.setBounds(m, hh, Math.max(qe, 0), bodyH);
-        int rx = m + (int) Math.round((qw + 16) * (1 - f)), rw = W - rx - m, ch = (int) Math.round(172 - 92 * f);
+        int rx = m + (int) Math.round((qw + 16) * (1 - f)), rw = W - rx - m, ch = (int) Math.round(172 - 92 * f + ALTRO_EXTRA * altro.get() * (1 - f));
         int gp = (int) Math.round(14 - 6 * f);
         confrontoWrap.setBounds(rx, hh, rw, bodyH - ch - gp);
         controlli.setBounds(rx, hh + bodyH - ch, rw, ch);
@@ -456,21 +456,91 @@ final class Finestra extends JFrame {
     }
 
     // ---------------------------------------------------------------- controlli
+    static final int ALTRO_EXTRA = 112; // quanto cresce la card dei controlli quando «Altro» è aperto
+
+    /** Quanto «Altro» è aperto (0 = chiuso, 1 = aperto): fa crescere la card verso l'alto. */
+    private final Anim.Val altro = new Anim.Val(0, () -> {
+        posiziona();
+        stage.repaint();
+    });
+
+    private void alternaAltro() {
+        altro.to(altro.target() > .5 ? 0 : 1, 320);
+    }
+
+    /** Il contenuto di «Altro»: appare con dissolvenza mentre la card si apre. */
+    private final class AltroPannello extends JPanel {
+        AltroPannello() {
+            setOpaque(false);
+            setLayout(null);
+        }
+
+        @Override
+        public void paint(Graphics g) {
+            double a = altro.get();
+            if (a >= 0.999) {
+                super.paint(g);
+                return;
+            }
+            Graphics2D g2 = (Graphics2D) g.create();
+            java.awt.Composite c = g2.getComposite();
+            float base = c instanceof java.awt.AlphaComposite ? ((java.awt.AlphaComposite) c).getAlpha() : 1f;
+            g2.setComposite(java.awt.AlphaComposite.getInstance(java.awt.AlphaComposite.SRC_OVER, (float) Math.max(0, Math.min(1, a * a)) * base));
+            super.paint(g2);
+            g2.dispose();
+        }
+
+        @Override
+        protected void paintComponent(Graphics gr) {
+            Graphics2D g = Gfx.g2(gr);
+            Tema.Pal p = Tema.p;
+            g.setFont(Tema.f(12f));
+            g.setColor(p.mut);
+            g.drawString("Formato", controlli.formato.getX(), controlli.formato.getY() - 5);
+            boolean on = controlli.croma.isEnabled();
+            g.setFont(Tema.f(12.5f));
+            g.setColor(on ? p.fg : Gfx.mulA(p.fg, .38));
+            FontMetrics fm = g.getFontMetrics();
+            String t = "Dettaglio colore";
+            Seg c = controlli.croma;
+            g.drawString(t, c.getX() - 12 - fm.stringWidth(t), (float) (c.getY() + c.getHeight() / 2.0 + (fm.getAscent() - fm.getDescent()) / 2.0));
+            g.dispose();
+        }
+    }
+
     private final class ControlliCard extends Velo {
-        final Seg preset;
-        final Scelta formato;
+        final Seg preset, croma;
         final Cursore qualita, dimensione;
+        final Scelta formato;
+        final Spunta ridimensiona, progressivo, grigio;
+        final TestaSezione testa;
+        final AltroPannello pannello = new AltroPannello();
         final Bott salva, copiaFile, copiaImg, tutto;
 
         ControlliCard() {
             setLayout(null);
             int q = Cfg.intero("qualita", 75, 0, 100), s = Cfg.intero("scala", 75, DIM_MIN, 100);
-            preset = new Seg(PRESET_NOMI, presetDi(q, s), 0, i -> applicaPreset(i));
-            formato = new Scelta(Motore.FORMATI, Motore.note(), Cfg.intero("formato", 0, 0, Motore.FORMATI.length - 1), i -> cambioFormato());
+            boolean rid = Cfg.bool("ridimensiona", false); // di base spenta: si rimpicciolisce solo se lo scegli
+            preset = new Seg(PRESET_NOMI, presetDi(q, rid ? s : 100), 0, i -> applicaPreset(i));
             qualita = new Cursore("Qualità", 0, 100, 1, q, v -> cambioManuale());
             qualita.formato = v -> "" + v;
-            dimensione = new Cursore("Dimensione", DIM_MIN, 100, 5, s, v -> cambioManuale());
+
+            // ---- sezione «Altro»
+            formato = new Scelta(Motore.FORMATI, Motore.note(), Cfg.intero("formato", 0, 0, Motore.FORMATI.length - 1), i -> cambioFormato());
+            dimensione = new Cursore("", DIM_MIN, 100, 5, s, v -> cambioManuale());
             dimensione.formato = v -> v + "%";
+            ridimensiona = new Spunta("Ridimensiona", rid, on -> cambioRidimensiona());
+            ridimensiona.setToolTipText("Spunta solo se vuoi anche rimpicciolire le immagini");
+            progressivo = new Spunta("Progressivo", Cfg.bool("progressivo", true), on -> cambioAltro());
+            grigio = new Spunta("Bianco e nero", Cfg.bool("grigio", false), on -> cambioAltro());
+            grigio.setToolTipText("Toglie i colori: il file pesa meno");
+            croma = new Seg(new String[]{"Standard", "Pieno"}, Cfg.intero("croma", 0, 0, 1), 72, i -> cambioAltro());
+            croma.alt = 32;
+            croma.fs = 12.5f;
+            testa = new TestaSezione("Altro", Finestra.this::alternaAltro);
+            testa.riassunto = this::riassuntoAltro;
+            testa.apertura = altro::get;
+
             salva = new Bott("Salva", "save", () -> salvaCorrente(0));
             copiaFile = new Bott("Copia file", "copy", () -> salvaCorrente(1));
             copiaImg = new Bott("Copia immagine", "image", () -> salvaCorrente(2));
@@ -481,8 +551,53 @@ final class Finestra extends JFrame {
             }
             tutto.alt = 44;
             tutto.fs = 14;
-            for (JComponent c : new JComponent[]{preset, formato, qualita, dimensione, salva, copiaFile, copiaImg, tutto}) add(c);
+            for (JComponent c : new JComponent[]{ridimensiona, dimensione, formato, progressivo, grigio, croma}) pannello.add(c); // la spunta sta sopra al cursore
+            for (JComponent c : new JComponent[]{preset, qualita, testa, pannello, salva, copiaFile, copiaImg, tutto}) add(c);
+            aggiornaAltro();
             abilita(false);
+        }
+
+        int fmt() {
+            return Math.max(0, formato.selezione());
+        }
+
+        /** Dimensione davvero applicata: 100% (originale) se «Ridimensiona» non è spuntata. */
+        int scalaEffettiva() {
+            return ridimensiona.isOn() ? dimensione.valore() : 100;
+        }
+
+        Motore.Altro altroMotore() {
+            return new Motore.Altro(progressivo.isOn(), grigio.isOn(), croma.selezione() == 1);
+        }
+
+        /** Lo slider Dimensione vale solo con la spunta. */
+        void aggiornaRidimensiona() {
+            boolean on = ridimensiona.isOn();
+            dimensione.setEnabled(on);
+            dimensione.setToolTipText(on ? null : "Spunta «Ridimensiona» per attivare questo cursore");
+        }
+
+        /** Abilita solo ciò che vale per il formato scelto e aggiorna il riassunto. */
+        void aggiornaAltro() {
+            boolean jpeg = fmt() == 0;
+            progressivo.setEnabled(jpeg);
+            progressivo.setToolTipText(jpeg ? "Il JPEG si carica prima sfocato e poi nitido: ideale per il web" : "Solo per il JPEG");
+            croma.setEnabled(jpeg && !grigio.isOn());
+            croma.setToolTipText(!jpeg ? "Solo per il JPEG" : grigio.isOn() ? "Non serve in bianco e nero"
+                    : "Standard: file più leggeri. Pieno: bordi colorati più nitidi, file più pesante");
+            aggiornaRidimensiona();
+            testa.repaint();
+            pannello.repaint();
+        }
+
+        String riassuntoAltro() {
+            java.util.List<String> v = new ArrayList<>();
+            v.add(Motore.FORMATI[fmt()]);
+            v.add(ridimensiona.isOn() ? "dimensione " + dimensione.valore() + "%" : "dimensione originale");
+            if (grigio.isOn()) v.add("bianco e nero");
+            if (fmt() == 0 && !grigio.isOn() && croma.selezione() == 1) v.add("colori pieni");
+            if (fmt() == 0 && !progressivo.isOn()) v.add("non progressivo");
+            return String.join(", ", v);
         }
 
         void abilita(boolean v) {
@@ -518,23 +633,19 @@ final class Finestra extends JFrame {
                 x -= 40;
             }
             int to = x + 40 - 8;
-            formato.larghezza = 118;
-            int fw = formato.getPreferredSize().width;
             preset.segW = 58;
             int pw = preset.getPreferredSize().width;
-            // prima i cursori, poi il formato; i preset solo se resta posto
-            boolean conPreset = to - (m + fw + 14 + pw + 14) >= 2 * 130 + 16;
+            // prima il cursore, i preset solo se resta posto; «Altro» si vede solo a finestra normale
+            boolean conPreset = to - (m + pw + 14) >= 220;
             preset.setVisible(conPreset);
+            testa.setVisible(false);
+            pannello.setVisible(false);
             int px = m;
             if (conPreset) {
                 preset.setBounds(px, y, pw, 36);
-                px += pw + 12;
+                px += pw + 14;
             }
-            formato.setBounds(px, y, fw, 36);
-            int from = px + fw + 14;
-            int cw = Math.max(80, (to - from - 16) / 2);
-            qualita.setBounds(from, (h - 52) / 2, cw, 52);
-            dimensione.setBounds(from + cw + 16, (h - 52) / 2, cw, 52);
+            qualita.setBounds(px, (h - 52) / 2, Math.max(100, Math.min(380, to - px)), 52);
         }
 
         @Override
@@ -544,17 +655,19 @@ final class Finestra extends JFrame {
                 return;
             }
             preset.setVisible(true);
+            testa.setVisible(true);
             int w = getWidth(), h = getHeight(), m = 22;
             int sw = Math.max(76, Math.min(110, (w - 2 * m - 190) / 4));
             preset.segW = sw;
             preset.setBounds(m, 14, preset.getPreferredSize().width, 36);
-            formato.larghezza = 168;
-            int fw = formato.getPreferredSize().width;
-            formato.setBounds(w - m - fw, 14, fw, 36);
             int gap = 28, cw = (w - 2 * m - gap) / 2;
             qualita.setBounds(m, 58, cw, 52);
-            dimensione.setBounds(m + cw + gap, 58, cw, 52);
+            testa.setBounds(m + cw + gap, 58, cw, 52);
             int y = h - 14 - 44;
+            int py = 114;
+            pannello.setVisible(altro.get() > .01);
+            pannello.setBounds(0, py, w, Math.max(0, y - 6 - py));
+            layoutAltro(cw, gap, m);
             int x = m;
             for (Bott b : new Bott[]{salva, copiaFile, copiaImg}) {
                 int bw = b.getPreferredSize().width;
@@ -563,6 +676,20 @@ final class Finestra extends JFrame {
             }
             int tw = Math.max(176, tutto.getPreferredSize().width);
             tutto.setBounds(w - m - tw, y, tw, 44);
+        }
+
+        /** Dentro «Altro»: a sinistra formato e opzioni del JPEG, a destra dimensione e colore. Coordinate del pannello. */
+        private void layoutAltro(int cw, int gap, int m) {
+            int xl = m, xr = m + cw + gap;
+            formato.larghezza = Math.max(120, Math.min(190, cw - 20));
+            formato.setBounds(xl + 10, 18, formato.getPreferredSize().width, 34);
+            dimensione.setBounds(xr, 2, cw, 52);
+            ridimensiona.setBounds(xr + 10, 0, ridimensiona.getPreferredSize().width, 20);
+            int y2 = 66;
+            progressivo.setBounds(xl + 10, y2 + 8, progressivo.getPreferredSize().width, 20);
+            grigio.setBounds(xl + 10 + progressivo.getWidth() + 28, y2 + 8, grigio.getPreferredSize().width, 20);
+            int lw = getFontMetrics(Tema.f(12.5f)).stringWidth("Dettaglio colore");
+            croma.setBounds(xr + 10 + lw + 12, y2 + 2, croma.getPreferredSize().width, 32);
         }
 
         @Override
@@ -575,10 +702,21 @@ final class Finestra extends JFrame {
             g.setFont(Tema.f(12f));
             FontMetrics fm = g.getFontMetrics();
             int x = preset.getX() + preset.getWidth() + 16;
-            int fine = formato.getX() - 16;
+            int fine = getWidth() - 22;
             if (!compatto && fine - x > fm.stringWidth(d)) {
                 g.setColor(p.mut);
                 g.drawString(d, fine - fm.stringWidth(d), 37);
+            }
+            if (!compatto) {
+                // un filo separa Qualità da «Altro»; quando «Altro» è aperto ne segna anche il bordo alto
+                g.setColor(Gfx.a(p.mut, 50));
+                int dx = testa.getX() - 14;
+                g.drawLine(dx, testa.getY() + 2, dx, testa.getY() + 48);
+                double a = Math.max(0, Math.min(1, altro.get()));
+                if (a > .01) {
+                    g.setColor(Gfx.a(p.mut, (int) (50 * a)));
+                    g.drawLine(22, 112, getWidth() - 22, 112);
+                }
             }
             g.dispose();
         }
@@ -591,20 +729,35 @@ final class Finestra extends JFrame {
         return -1;
     }
 
+    /** Un preset con dimensione sotto il 100% accende «Ridimensiona»; «Nitida» (100%) la spegne. */
     private void applicaPreset(int i) {
         controlli.qualita.setValore(PRESET[i][0], true, false);
-        controlli.dimensione.setValore(PRESET[i][1], true, false);
+        if (PRESET[i][1] < 100) controlli.dimensione.setValore(PRESET[i][1], true, false);
+        controlli.ridimensiona.setOn(PRESET[i][1] < 100, true, false);
+        controlli.aggiornaAltro();
         deb.restart();
     }
 
     private void cambioManuale() {
-        int i = presetDi(controlli.qualita.valore(), controlli.dimensione.valore());
+        int i = presetDi(controlli.qualita.valore(), controlli.scalaEffettiva());
         if (i != controlli.preset.selezione()) controlli.preset.seleziona(i, true, false);
         deb.restart();
     }
 
+    private void cambioRidimensiona() {
+        controlli.aggiornaAltro();
+        cambioManuale();
+    }
+
     private void cambioFormato() {
         aggiornaQualita();
+        controlli.aggiornaAltro();
+        deb.restart();
+    }
+
+    /** Una scelta di «Altro» che non è né formato né dimensione. */
+    private void cambioAltro() {
+        controlli.aggiornaAltro();
         deb.restart();
     }
 
@@ -625,6 +778,10 @@ final class Finestra extends JFrame {
         Cfg.set("formato", formatoCorrente());
         Cfg.set("qualita", controlli.qualita.valore());
         Cfg.set("scala", controlli.dimensione.valore());
+        Cfg.set("ridimensiona", controlli.ridimensiona.isOn());
+        Cfg.set("progressivo", controlli.progressivo.isOn());
+        Cfg.set("grigio", controlli.grigio.isOn());
+        Cfg.set("croma", controlli.croma.selezione());
         Cfg.salva();
     }
 
@@ -1109,15 +1266,15 @@ final class Finestra extends JFrame {
         final Voce v = cur;
         final BufferedImage src = origImg, full = vistaFull;
         final Rectangle crop = v.crop == null ? null : new Rectangle(v.crop);
-        final int q = controlli.qualita.valore(), pct = controlli.dimensione.valore();
-        final boolean prog = Cfg.bool("progressivo", true);
+        final int q = controlli.qualita.valore(), pct = controlli.scalaEffettiva();
+        final Motore.Altro alt = controlli.altroMotore();
         final int fmt = formatoCorrente();
         final int tok = ++seqAnteprima;
         confronto.inCalcolo(true);
         anteprimaEx.submit(() -> {
             try {
                 if (tok != seqAnteprima) return;
-                byte[] d = Motore.render(src, crop, pct, q, prog, fmt);
+                byte[] d = Motore.render(src, crop, pct, q, alt, fmt);
                 if (tok != seqAnteprima) return;
                 BufferedImage dec = Motore.decodifica(d);
                 Rectangle rc = Motore.ritaglioValido(src, crop);
@@ -1171,14 +1328,14 @@ final class Finestra extends JFrame {
         if (cur == null || origImg == null || inElaborazione) return;
         final Voce v = cur;
         final BufferedImage src = origImg;
-        final int q = controlli.qualita.valore(), pct = controlli.dimensione.valore();
-        final boolean prog = Cfg.bool("progressivo", true);
+        final int q = controlli.qualita.valore(), pct = controlli.scalaEffettiva();
+        final Motore.Altro alt = controlli.altroMotore();
         final int fmt = formatoCorrente();
         final Rectangle crop = v.crop == null ? null : new Rectangle(v.crop);
         new SwingWorker<Object[], Void>() {
             @Override
             protected Object[] doInBackground() throws Exception {
-                byte[] d = Motore.render(src, crop, pct, q, prog, fmt);
+                byte[] d = Motore.render(src, crop, pct, q, alt, fmt);
                 if (modo == 2) return new Object[]{d, null};
                 return new Object[]{d, scrivi(v, d)};
             }
@@ -1276,8 +1433,8 @@ final class Finestra extends JFrame {
         inElaborazione = true;
         annullaElab = false;
         final List<Voce> lotto = new ArrayList<>(voci);
-        final int q = controlli.qualita.valore(), pct = controlli.dimensione.valore();
-        final boolean prog = Cfg.bool("progressivo", true);
+        final int q = controlli.qualita.valore(), pct = controlli.scalaEffettiva();
+        final Motore.Altro alt = controlli.altroMotore();
         final int fmt = formatoCorrente();
         AvanzamentoScheda av = new AvanzamentoScheda(() -> annullaElab = true);
         overlay.mostra(av, 520, 270, false);
@@ -1293,7 +1450,7 @@ final class Finestra extends JFrame {
                     publish(new Object[]{i, lotto.size(), v.nome});
                     try {
                         BufferedImage img = v.mem != null ? v.mem : Motore.leggi(v.file);
-                        byte[] d = Motore.render(img, v.crop, pct, q, prog, fmt);
+                        byte[] d = Motore.render(img, v.crop, pct, q, alt, fmt);
                         scrivi(v, d);
                         v.out = d.length;
                         prima += v.orig;

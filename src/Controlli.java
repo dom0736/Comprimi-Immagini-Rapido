@@ -259,6 +259,13 @@ class Seg extends JComponent {
         return sel;
     }
 
+    @Override
+    public void setEnabled(boolean e) {
+        super.setEnabled(e);
+        setCursor(Cursor.getPredefinedCursor(e ? Cursor.HAND_CURSOR : Cursor.DEFAULT_CURSOR));
+        repaint();
+    }
+
     void seleziona(int i, boolean anim, boolean fire) {
         boolean cambia = i != sel;
         int prima = sel;
@@ -285,6 +292,7 @@ class Seg extends JComponent {
         Graphics2D g = Gfx.g2(gr);
         Tema.Pal p = Tema.p;
         double w = getWidth(), h = getHeight(), sw = segLarg();
+        if (!isEnabled()) g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, .38f));
         g.setColor(p.btn);
         g.fill(Gfx.rr(0, 0, w, h, h / 2));
         g.setColor(p.btnBordo);
@@ -593,6 +601,209 @@ class Interruttore extends JComponent {
             g.setColor(Gfx.a(p.acc1, 200));
             g.setStroke(new BasicStroke(2f));
             g.draw(Gfx.rr(tx - 2, tyy - 2, tw + 4, th + 4, th / 2 + 2));
+        }
+        g.dispose();
+    }
+}
+
+/** Casella con spunta: per le scelte che si fanno apposta (es. Ridimensiona). Spenta di base. */
+class Spunta extends JComponent {
+    final String testo;
+    private boolean on;
+    private final Anim.Val v = new Anim.Val(0, this::repaint);
+    private final Anim.Val hov = new Anim.Val(0, this::repaint);
+    java.util.function.Consumer<Boolean> onCambio;
+
+    Spunta(String testo, boolean on, java.util.function.Consumer<Boolean> onCambio) {
+        this.testo = testo;
+        this.on = on;
+        this.onCambio = onCambio;
+        v.jump(on ? 1 : 0);
+        setFocusable(true);
+        setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                hov.to(1, 140);
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                hov.to(0, 200);
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                if (isEnabled() && SwingUtilities.isLeftMouseButton(e) && contains(e.getPoint())) {
+                    requestFocusInWindow();
+                    setOn(!Spunta.this.on, true, true);
+                }
+            }
+        });
+        addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyReleased(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_SPACE || e.getKeyCode() == KeyEvent.VK_ENTER) setOn(!Spunta.this.on, true, true);
+            }
+        });
+        addFocusListener(new FocusAdapter() {
+            @Override
+            public void focusGained(FocusEvent e) {
+                repaint();
+            }
+
+            @Override
+            public void focusLost(FocusEvent e) {
+                repaint();
+            }
+        });
+    }
+
+    boolean isOn() {
+        return on;
+    }
+
+    @Override
+    public void setEnabled(boolean e) {
+        super.setEnabled(e);
+        setFocusable(e);
+        setCursor(Cursor.getPredefinedCursor(e ? Cursor.HAND_CURSOR : Cursor.DEFAULT_CURSOR));
+        repaint();
+    }
+
+    void setOn(boolean nuovo, boolean anim, boolean fire) {
+        if (nuovo == on) return;
+        on = nuovo;
+        v.to(on ? 1 : 0, anim ? 200 : 0);
+        repaint();
+        if (fire && onCambio != null) onCambio.accept(on);
+    }
+
+    private static final int BOX = 16;
+
+    @Override
+    public Dimension getPreferredSize() {
+        return new Dimension(BOX + 8 + getFontMetrics(Tema.f(12.5f)).stringWidth(testo) + 2, 20);
+    }
+
+    @Override
+    protected void paintComponent(Graphics gr) {
+        Graphics2D g = Gfx.g2(gr);
+        Tema.Pal p = Tema.p;
+        double h = getHeight(), by = (h - BOX) / 2.0;
+        double q = Math.max(0, Math.min(1, v.get()));
+        if (!isEnabled()) g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, .38f));
+        g.setColor(p.campo);
+        g.fill(Gfx.rr(0, by, BOX, BOX, 5));
+        g.setColor(Gfx.mix(p.btnBordo, p.acc1, hov.get() * .6));
+        g.setStroke(new BasicStroke(1.2f));
+        g.draw(Gfx.rr(.6, by + .6, BOX - 1.2, BOX - 1.2, 4.5));
+        if (q > 0.01) {
+            java.awt.Composite old = g.getComposite();
+            g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, (float) q));
+            Gfx.pillolaAcc(g, 0, by, BOX, BOX, 5, 0);
+            g.setColor(java.awt.Color.WHITE);
+            g.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            java.awt.geom.Path2D.Double seg = new java.awt.geom.Path2D.Double();
+            seg.moveTo(BOX * .27, by + BOX * .53);
+            seg.lineTo(BOX * .44, by + BOX * .70);
+            seg.lineTo(BOX * .75, by + BOX * .32);
+            g.draw(seg);
+            g.setComposite(old);
+        }
+        g.setFont(Tema.f(12.5f));
+        g.setColor(p.fg);
+        FontMetrics fm = g.getFontMetrics();
+        g.drawString(testo, BOX + 8, (float) (h / 2 + (fm.getAscent() - fm.getDescent()) / 2.0));
+        if (isFocusOwner()) {
+            g.setColor(Gfx.a(p.acc1, 200));
+            g.setStroke(new BasicStroke(2f));
+            g.draw(Gfx.rr(-2, by - 2, BOX + 4, BOX + 4, 7));
+        }
+        g.dispose();
+    }
+}
+
+/** Intestazione cliccabile di una sezione a scomparsa: freccetta che si gira, titolo e un riassunto di ciò che c'è dentro. */
+class TestaSezione extends JComponent {
+    final String titolo;
+    java.util.function.Supplier<String> riassunto = () -> "";
+    java.util.function.DoubleSupplier apertura = () -> 0;
+    private final Runnable onToggle;
+    private final Anim.Val hov = new Anim.Val(0, this::repaint);
+    private static final int PAD = 11;
+
+    TestaSezione(String titolo, Runnable onToggle) {
+        this.titolo = titolo;
+        this.onToggle = onToggle;
+        setFocusable(true);
+        setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                hov.to(1, 140);
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                hov.to(0, 200);
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                if (SwingUtilities.isLeftMouseButton(e) && contains(e.getPoint())) {
+                    requestFocusInWindow();
+                    TestaSezione.this.onToggle.run();
+                }
+            }
+        });
+        addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyReleased(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_SPACE || e.getKeyCode() == KeyEvent.VK_ENTER) TestaSezione.this.onToggle.run();
+            }
+        });
+        addFocusListener(new FocusAdapter() {
+            @Override
+            public void focusGained(FocusEvent e) {
+                repaint();
+            }
+
+            @Override
+            public void focusLost(FocusEvent e) {
+                repaint();
+            }
+        });
+    }
+
+    @Override
+    protected void paintComponent(Graphics gr) {
+        Graphics2D g = Gfx.g2(gr);
+        Tema.Pal p = Tema.p;
+        double w = getWidth(), ap = Math.max(0, Math.min(1, apertura.getAsDouble()));
+        // freccetta: a destra da chiusa, in giù da aperta
+        g.translate(PAD + 4, 8.5);
+        g.rotate(-Math.PI / 2 * (1 - ap));
+        java.awt.geom.Path2D.Double fr = new java.awt.geom.Path2D.Double();
+        fr.moveTo(-4.5, -2);
+        fr.lineTo(0, 2.5);
+        fr.lineTo(4.5, -2);
+        g.setColor(Gfx.mix(p.mut, p.fg, hov.get()));
+        g.setStroke(new BasicStroke(1.8f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g.draw(fr);
+        g.rotate(Math.PI / 2 * (1 - ap));
+        g.translate(-(PAD + 4), -8.5);
+        g.setFont(Tema.fb(13f));
+        g.setColor(Gfx.mix(p.fg, p.acc1, hov.get() * .5));
+        g.drawString(titolo, PAD + 16, 13);
+        g.setFont(Tema.f(12f));
+        g.setColor(p.mut);
+        FontMetrics fm = g.getFontMetrics();
+        g.drawString(Gfx.taglia(riassunto.get(), fm, (int) (w - 2 * PAD)), PAD - 1, 40);
+        if (isFocusOwner()) {
+            g.setColor(Gfx.a(p.acc1, 150));
+            g.setStroke(new BasicStroke(1.6f));
+            g.draw(Gfx.rr(1, 1, w - 2, getHeight() - 2, 10));
         }
         g.dispose();
     }

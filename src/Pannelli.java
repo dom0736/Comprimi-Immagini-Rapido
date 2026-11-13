@@ -208,7 +208,7 @@ class GuidaScheda extends Scheda {
     static final String CONTENUTO = String.join("\n",
             "# COME SI USA",
             "1. Trascina le immagini (o una cartella intera) nella finestra. Oppure premi «Aggiungi» o Ctrl+V per incollare uno screenshot.",
-            "2. Scegli come comprimere: i pulsanti Minima, Leggera, Normale e Nitida impostano insieme qualità e dimensione; con i due cursori puoi regolarle a mano.",
+            "2. Scegli come comprimere: i pulsanti Minima, Leggera, Normale e Nitida impostano la qualità (e la dimensione, se serve); con il cursore Qualità la regoli a mano. Formato, dimensione e altre opzioni stanno nella sezione «Altro», chiusa di base.",
             "3. Sposta la linea sull'anteprima per confrontare l'originale (a sinistra) con la versione compressa (a destra). Sotto vedi quanto pesa prima e dopo. Con la rotellina del mouse ingrandisci l'anteprima, trascinala per spostarti, doppio clic per tornare alla vista intera.",
             "4. «Comprimi tutto» salva tutte le immagini dell'elenco. «Salva», «Copia file» e «Copia immagine» lavorano solo su quella selezionata.",
             "",
@@ -217,10 +217,19 @@ class GuidaScheda extends Scheda {
             "• Leggera: qualità 65, dimensione 50%. Per siti e documenti.",
             "• Normale: qualità 75, dimensione 75%. È l'equilibrio consigliato.",
             "• Nitida: qualità 90, dimensione 100%. Peso ridotto senza rimpicciolire la foto.",
+            "Minima, Leggera e Normale accendono da sole «Ridimensiona» (in «Altro»); Nitida la spegne e lascia la dimensione originale.",
             "Se muovi un cursore a mano, nessun pulsante resta acceso: la tua scelta viene ricordata alla prossima apertura.",
             "",
+"# ALTRO",
+            "Premi «Altro», accanto al cursore Qualità, per aprire le opzioni meno usate. Da chiusa, la sezione riassume cosa hai scelto.",
+            "• Formato: JPEG, PNG o PNG 256 (vedi sotto).",
+            "• Ridimensiona: di base è spenta e il cursore della dimensione è bloccato, così le immagini restano della misura originale. Spunta solo se vuoi anche rimpicciolirle, poi scegli la percentuale.",
+            "• Progressivo (solo JPEG): la foto si carica prima sfocata e poi nitida, utile per il web.",
+            "• Bianco e nero: toglie i colori e il file pesa meno. Vale per tutti i formati.",
+            "• Dettaglio colore (solo JPEG): «Standard» tiene i colori a metà risoluzione, file più leggero; «Pieno» li tiene alla risoluzione piena, bordi colorati più nitidi (testi rossi, grafica) ma file più pesante.",
+            "",
             "# IL FORMATO",
-            "Accanto ai cursori scegli il formato del file:",
+            "In «Altro» scegli il formato del file:",
             "• JPEG: il più leggero per le foto. Usa i cursori Qualità e Dimensione. Se nella cartella «tools» c'è MozJPEG, lo usa da solo e i file sono ancora più piccoli.",
             "• PNG: senza perdita di qualità e con le trasparenze. Per screenshot, loghi e grafica. Il cursore Qualità si spegne (passa il mouse per il motivo): è già al massimo.",
             "• PNG 256: come il PNG ma con meno colori (il cursore Qualità sceglie quanti, da 16 a 256), molto più leggero (di solito dal 50% al 70% in meno). Ottimo per screenshot e grafica, meno adatto a foto con sfumature.",
@@ -247,8 +256,7 @@ class GuidaScheda extends Scheda {
             "• Il JPG non ha la trasparenza: le parti trasparenti diventano bianche.",
             "• Le foto girate dal telefono vengono raddrizzate (si legge l'orientamento EXIF).",
             "• Il programma si apre una volta sola: se lo riavvii, riporta in primo piano quello già aperto.",
-            "• «JPEG progressivo» (Impostazioni): la foto si carica prima sfocata e poi nitida, utile per il web.",
-            "",
+                        "",
             "# OPEN SOURCE E SEGNALAZIONI",
             "Comprimi Immagini Rapido " + Cfg.VERSION + " è open source (licenza MIT). Se qualcosa non funziona o hai un'idea, scrivimi a " + Cfg.EMAIL + ".",
             "Con «Segnala un problema» (in Impostazioni) il programma crea sul Desktop un file con i dati tecnici utili: versione, Windows, schermi, impostazioni ed errori registrati. Non contiene immagini né i nomi delle tue cartelle. Puoi leggerlo prima di inviarlo: allegalo alla mail con due righe su cosa stavi facendo.",
@@ -339,18 +347,21 @@ class GuidaScheda extends Scheda {
     }
 }
 
-/** Impostazioni: tema, dove salvare, cartella, opzioni; più «Segnala un problema». */
+/** Impostazioni: tema, dove salvare, cartella, opzioni; più «Segnala un problema». Se la finestra è bassa, le opzioni scorrono. */
 class ImpostazioniScheda extends Scheda {
+    private static final int TOP = 80, PIEDE = 88, ALTEZZA_CONTENUTO = 400;
     private final Finestra f;
     private final Seg tema, dove;
     private final Bott cambia, apri, segnala, chiudi, x;
-    private final Interruttore apriFine, progressivo, animazioni;
-    private final Anim.Val dim = new Anim.Val(0, this::repaint);
+    private final Interruttore apriFine, animazioni;
+    private final Anim.Val dim = new Anim.Val(0, this::ridisegna);
+    private final Contenuto contenuto = new Contenuto();
+    private final JScrollPane scroll;
 
     ImpostazioniScheda(Finestra f) {
         this.f = f;
         cw = 580;
-        ch = 620;
+        ch = 580;
         tema = new Seg(new String[]{"Scuro", "Chiaro"}, "chiaro".equals(Cfg.str("tema", "scuro")) ? 1 : 0, 110, i -> f.cambiaTema(i == 1 ? "chiaro" : "scuro"));
         dove = new Seg(new String[]{"Cartella fissa", "Accanto all'originale"}, "accanto".equals(Cfg.str("dove", "fissa")) ? 1 : 0, 0, i -> {
             Cfg.set("dove", i == 1 ? "accanto" : "fissa");
@@ -359,7 +370,7 @@ class ImpostazioniScheda extends Scheda {
             f.uscitaCambiata();
         });
         dim.jump("accanto".equals(Cfg.str("dove", "fissa")) ? 1 : 0);
-        cambia = new Bott("Cambia…", "folder", () -> f.scegliCartellaUscita(this::repaint));
+        cambia = new Bott("Cambia…", "folder", () -> f.scegliCartellaUscita(this::ridisegna));
         cambia.alt = 34;
         cambia.fs = 12;
         apri = new Bott("Apri", null, () -> f.apriUscita());
@@ -369,12 +380,6 @@ class ImpostazioniScheda extends Scheda {
                 Cfg.bool("apri_fine", true), v -> {
             Cfg.set("apri_fine", v);
             Cfg.salva();
-        });
-        progressivo = new Interruttore("JPEG progressivo", "Si carica prima sfocato e poi nitido: ideale per il web",
-                Cfg.bool("progressivo", true), v -> {
-            Cfg.set("progressivo", v);
-            Cfg.salva();
-            f.anteprima();
         });
         animazioni = new Interruttore("Animazioni", "Movimenti e dissolvenze. Spegnile se l'app ti sembra lenta",
                 Cfg.bool("animazioni", false), v -> {
@@ -387,8 +392,17 @@ class ImpostazioniScheda extends Scheda {
         chiudi = new Bott("Fatto", null, true, () -> overlay.chiudi());
         chiudi.alt = 38;
         x = bottoneChiudi();
-        for (JComponent c : new JComponent[]{tema, dove, cambia, apri, apriFine, progressivo, animazioni, segnala, chiudi, x}) add(c);
+        for (JComponent c : new JComponent[]{tema, dove, cambia, apri, apriFine, animazioni}) contenuto.add(c);
+        scroll = ScrollSottile.crea(contenuto);
+        scroll.getViewport().setScrollMode(javax.swing.JViewport.SIMPLE_SCROLL_MODE);
+        add(scroll);
+        for (JComponent c : new JComponent[]{segnala, chiudi, x}) add(c);
         aggiornaDim();
+    }
+
+    private void ridisegna() {
+        contenuto.repaint();
+        repaint();
     }
 
     private void aggiornaDim() {
@@ -399,80 +413,117 @@ class ImpostazioniScheda extends Scheda {
 
     @Override
     public void doLayout() {
-        int w = getWidth(), h = getHeight(), m = 30;
+        int w = getWidth(), h = getHeight();
         x.setBounds(w - 22 - 34, 23, 34, 34);
-        tema.setBounds(m, 130, tema.getPreferredSize().width, 36);
-        dove.setBounds(m, 214, dove.getPreferredSize().width, 36);
-        int fy = 294;
-        Dimension2 d1 = new Dimension2(cambia.getPreferredSize().width), d2 = new Dimension2(apri.getPreferredSize().width);
-        apri.setBounds(w - m - d2.w, fy, d2.w, 40);
-        cambia.setBounds(w - m - d2.w - 8 - d1.w, fy, d1.w, 40);
-        apriFine.setBounds(m, 360, w - 2 * m, 54);
-        progressivo.setBounds(m, 418, w - 2 * m, 54);
-        animazioni.setBounds(m, 476, w - 2 * m, 54);
+        scroll.setBounds(0, TOP, w, Math.max(60, h - TOP - PIEDE));
         int bw = segnala.getPreferredSize().width;
-        segnala.setBounds(m, h - 24 - 38 - 8 - 18, bw, 38);
-        int cw2 = 120;
-        chiudi.setBounds(w - m - cw2, h - 24 - 38 - 8 - 18, cw2, 38);
-    }
-
-    private static final class Dimension2 {
-        final int w;
-
-        Dimension2(int w) {
-            this.w = w;
-        }
+        segnala.setBounds(30, h - PIEDE, bw, 38);
+        chiudi.setBounds(w - 30 - 120, h - PIEDE, 120, 38);
+        scroll.revalidate();
     }
 
     @Override
     protected void paintComponent(Graphics gr) {
         super.paintComponent(gr);
-        aggiornaDim();
         Graphics2D g = Gfx.g2(gr);
         Tema.Pal p = Tema.p;
         titolo(g, "gear", "Impostazioni", "Il programma ricorda le tue scelte");
-        g.setFont(Tema.f(12f));
-        g.setColor(p.mut);
-        g.drawString("Aspetto", 31, 118);
-        g.drawString("Dove salvare", 31, 202);
-        double q = dim.get();
-        g.setColor(Gfx.mulA(p.mut, 1 - .55 * q));
-        g.drawString("Cartella di destinazione", 31, 282);
-        // campo con il percorso
-        int w = getWidth(), m = 30;
-        int fx = m, fy = 294, fw = cambia.getX() - 10 - fx, fh = 40;
-        java.awt.Composite old = g.getComposite();
-        g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, (float) (1 - .55 * q)));
-        g.setColor(p.campo);
-        g.fill(Gfx.rr(fx, fy, fw, fh, 12));
-        g.setColor(p.campoBordo);
-        g.setStroke(new BasicStroke(1f));
-        g.draw(Gfx.rr(fx + .5, fy + .5, fw - 1, fh - 1, 11.5));
-        Gfx.glifo(g, "folder", fx + 20, fy + fh / 2.0, 16, p.mut);
-        g.setFont(Tema.f(12.5f));
-        g.setColor(p.fg);
-        String s = Cfg.cartellaUscita().toString();
-        FontMetrics fm = g.getFontMetrics();
-        int max = fw - 44 - 12;
-        if (fm.stringWidth(s) > max) { // taglia l'inizio: la parte finale del percorso è la più utile
-            while (s.length() > 4 && fm.stringWidth("…" + s) > max) s = s.substring(1);
-            s = "…" + s;
-        }
-        g.drawString(s, fx + 38, (float) (fy + fh / 2.0 + (fm.getAscent() - fm.getDescent()) / 2.0));
-        g.setComposite(old);
-        if (q > .3) {
-            g.setFont(Tema.f(11.5f));
-            g.setColor(p.mut);
-            g.drawString("Con «Accanto all'originale» ogni immagine produce nome_compressa.jpg/.png", 31, 354);
-        }
         g.setFont(Tema.f(11.5f));
         g.setColor(Gfx.mulA(p.mut, .8));
-        g.drawString("Versione " + Cfg.VERSION + "  ·  Fatto con cuore da Domenico Castaldo", 31, h() - 20);
+        g.drawString("Versione " + Cfg.VERSION + "  ·  Fatto con cuore da Domenico Castaldo", 31, getHeight() - 20);
         g.dispose();
     }
 
-    private int h() {
-        return getHeight();
+    /** Area scorrevole con tutte le opzioni (coordinate relative alla sua cima). */
+    private final class Contenuto extends JPanel implements javax.swing.Scrollable {
+        Contenuto() {
+            setOpaque(false);
+            setLayout(null);
+        }
+
+        @Override
+        public java.awt.Dimension getPreferredSize() {
+            return new java.awt.Dimension(10, ALTEZZA_CONTENUTO);
+        }
+
+        @Override
+        public java.awt.Dimension getPreferredScrollableViewportSize() {
+            return getPreferredSize();
+        }
+
+        @Override
+        public int getScrollableUnitIncrement(java.awt.Rectangle r, int o, int d) {
+            return 24;
+        }
+
+        @Override
+        public int getScrollableBlockIncrement(java.awt.Rectangle r, int o, int d) {
+            return Math.max(40, r.height - 30);
+        }
+
+        @Override
+        public boolean getScrollableTracksViewportWidth() {
+            return true;
+        }
+
+        @Override
+        public boolean getScrollableTracksViewportHeight() {
+            return false;
+        }
+
+        @Override
+        public void doLayout() {
+            int w = getWidth(), m = 30;
+            tema.setBounds(m, 50, tema.getPreferredSize().width, 36);
+            dove.setBounds(m, 134, dove.getPreferredSize().width, 36);
+            int fy = 214, d1 = cambia.getPreferredSize().width, d2 = apri.getPreferredSize().width;
+            apri.setBounds(w - m - d2, fy, d2, 40);
+            cambia.setBounds(w - m - d2 - 8 - d1, fy, d1, 40);
+            apriFine.setBounds(m, 280, w - 2 * m, 54);
+            animazioni.setBounds(m, 338, w - 2 * m, 54);
+        }
+
+        @Override
+        protected void paintComponent(Graphics gr) {
+            aggiornaDim();
+            Graphics2D g = Gfx.g2(gr);
+            Tema.Pal p = Tema.p;
+            g.setFont(Tema.f(12f));
+            g.setColor(p.mut);
+            g.drawString("Aspetto", 31, 38);
+            g.drawString("Dove salvare", 31, 122);
+            double q = dim.get();
+            g.setColor(Gfx.mulA(p.mut, 1 - .55 * q));
+            g.drawString("Cartella di destinazione", 31, 202);
+            // campo con il percorso
+            int m = 30;
+            int fx = m, fy = 214, fw = cambia.getX() - 10 - fx, fh = 40;
+            java.awt.Composite old = g.getComposite();
+            g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, (float) (1 - .55 * q)));
+            g.setColor(p.campo);
+            g.fill(Gfx.rr(fx, fy, fw, fh, 12));
+            g.setColor(p.campoBordo);
+            g.setStroke(new BasicStroke(1f));
+            g.draw(Gfx.rr(fx + .5, fy + .5, fw - 1, fh - 1, 11.5));
+            Gfx.glifo(g, "folder", fx + 20, fy + fh / 2.0, 16, p.mut);
+            g.setFont(Tema.f(12.5f));
+            g.setColor(p.fg);
+            String s = Cfg.cartellaUscita().toString();
+            FontMetrics fm = g.getFontMetrics();
+            int max = fw - 44 - 12;
+            if (fm.stringWidth(s) > max) { // taglia l'inizio: la parte finale del percorso è la più utile
+                while (s.length() > 4 && fm.stringWidth("…" + s) > max) s = s.substring(1);
+                s = "…" + s;
+            }
+            g.drawString(s, fx + 38, (float) (fy + fh / 2.0 + (fm.getAscent() - fm.getDescent()) / 2.0));
+            g.setComposite(old);
+            if (q > .3) {
+                g.setFont(Tema.f(11.5f));
+                g.setColor(p.mut);
+                g.drawString("Con «Accanto all'originale» ogni immagine produce nome_compressa.jpg/.png", 31, 274);
+            }
+            g.dispose();
+        }
     }
 }
 

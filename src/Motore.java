@@ -3,7 +3,11 @@ import javax.imageio.ImageIO;
 import javax.imageio.ImageReadParam;
 import javax.imageio.ImageReader;
 import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageTypeSpecifier;
 import javax.imageio.ImageWriter;
+import javax.imageio.metadata.IIOMetadata;
+import javax.imageio.metadata.IIOMetadataNode;
+import org.w3c.dom.Node;
 import javax.imageio.plugins.jpeg.JPEGImageWriteParam;
 import javax.imageio.stream.ImageInputStream;
 import javax.imageio.stream.ImageOutputStream;
@@ -180,13 +184,36 @@ final class Motore {
 
     static final int LATO_MIN = 16; // pixel minimi del lato corto della foto
 
+    /** Le scelte della sezione «Altro» che cambiano come si codifica (oltre a formato, qualità e dimensione). */
+    static final class Altro {
+        final boolean progressivo, grigio, croma444;
+
+        Altro(boolean progressivo, boolean grigio, boolean croma444) {
+            this.progressivo = progressivo;
+            this.grigio = grigio;
+            this.croma444 = croma444;
+        }
+
+        /** Le scelte che non cambiano la codifica base: progressivo e colori standard. */
+        static final Altro BASE = new Altro(true, false, false);
+
+        /** Serve a MozJPEG/JPEG qualcosa oltre alla qualità? (se no si usa il comando base) */
+        boolean haExtra(int formato) {
+            return formato == 0 && (grigio || croma444);
+        }
+    }
+
     /** Ritaglia, ridimensiona e codifica in JPEG. */
     static byte[] render(BufferedImage src, Rectangle crop, int pct, int q, boolean progressivo) throws IOException {
         return render(src, crop, pct, q, progressivo, 0);
     }
 
-    /** Ritaglia, ridimensiona e codifica: formato 0 = JPEG, 1 = PNG, 2 = PNG a 256 colori. */
     static byte[] render(BufferedImage src, Rectangle crop, int pct, int q, boolean progressivo, int formato) throws IOException {
+        return render(src, crop, pct, q, new Altro(progressivo, false, false), formato);
+    }
+
+    /** Ritaglia, ridimensiona e codifica: formato 0 = JPEG, 1 = PNG, 2 = PNG a 256 colori. */
+    static byte[] render(BufferedImage src, Rectangle crop, int pct, int q, Altro alt, int formato) throws IOException {
         BufferedImage img = regione(src, crop);
         // la foto non scende mai sotto LATO_MIN px sul lato corto (mai 1x1), né ingrandisce l'originale
         int lato = Math.min(img.getWidth(), img.getHeight());
@@ -198,18 +225,58 @@ final class Motore {
         if (w != img.getWidth() || h != img.getHeight()) img = Gfx.scala(img, w, h);
         if (formato == 0) {
             BufferedImage rgb = rgb(img);
-            if (mozDisponibile()) {
+            if (mozDisponibile() && !(alt.haExtra(formato) && mozExtraGuasto)) {
                 try {
-                    return mozjpeg(rgb, q, progressivo);
+                    return mozjpeg(rgb, q, alt);
                 } catch (IOException | RuntimeException e) {
-                    Cfg.err("MozJPEG non ha funzionato, uso il JPEG normale", e);
-                    mozGuasto = true;
+                    if (alt.haExtra(formato)) {
+                        // forse è solo una opzione non capita da questo cjpeg: MozJPEG resta valido per il resto
+                        Cfg.err("MozJPEG non ha accettato le opzioni Altro, uso il JPEG di Java", e);
+                        mozExtraGuasto = true;
+                    } else {
+                        Cfg.err("MozJPEG non ha funzionato, uso il JPEG normale", e);
+                        mozGuasto = true;
+                    }
                 }
             }
-            return jpeg(rgb, q, progressivo);
+            return jpeg(alt.grigio ? grigi(rgb) : rgb, q, alt.progressivo, alt.croma444);
         }
+        if (alt.grigio) img = grigioArgb(img);
         if (formato == 2) img = Quantizza.aColori(img, coloriDa(q));
         return png(img);
+    }
+
+    /** Luminanza come fanno i codificatori JPEG (0,299 R + 0,587 G + 0,114 B), scritta direttamente nei byte: niente conversioni di colore di Java. */
+    static BufferedImage grigi(BufferedImage rgb) {
+        int w = rgb.getWidth(), h = rgb.getHeight();
+        BufferedImage o = new BufferedImage(w, h, BufferedImage.TYPE_BYTE_GRAY);
+        byte[] dati = ((java.awt.image.DataBufferByte) o.getRaster().getDataBuffer()).getData();
+        int[] riga = new int[w];
+        for (int y = 0; y < h; y++) {
+            rgb.getRGB(0, y, w, 1, riga, 0, w);
+            for (int x = 0; x < w; x++) dati[y * w + x] = (byte) luma(riga[x]);
+        }
+        return o;
+    }
+
+    private static int luma(int c) {
+        return (int) Math.round(0.299 * ((c >> 16) & 255) + 0.587 * ((c >> 8) & 255) + 0.114 * (c & 255));
+    }
+
+    /** Stessa immagine in grigi ma ancora RGB/ARGB (per i PNG): trasparenza intatta. */
+    static BufferedImage grigioArgb(BufferedImage s) {
+        int w = s.getWidth(), h = s.getHeight();
+        BufferedImage o = new BufferedImage(w, h, s.getColorModel().hasAlpha() ? BufferedImage.TYPE_INT_ARGB : BufferedImage.TYPE_INT_RGB);
+        int[] riga = new int[w];
+        for (int y = 0; y < h; y++) {
+            s.getRGB(0, y, w, 1, riga, 0, w);
+            for (int x = 0; x < w; x++) {
+                int c = riga[x], l = luma(c);
+                riga[x] = (c & 0xFF000000) | (l << 16) | (l << 8) | l;
+            }
+            o.setRGB(0, y, w, 1, riga, 0, w);
+        }
+        return o;
     }
 
     /** Qualità 0..100 → colori del PNG 256: 0 = 16 colori, 100 = 256 (crescita esponenziale: i passi sembrano uniformi all'occhio). */
@@ -220,7 +287,7 @@ final class Motore {
 
     // ---------------------------------------------------------------- MozJPEG (programma esterno cjpeg, se presente in "tools")
     private static Path moz;
-    private static boolean mozCercato, mozGuasto;
+    private static boolean mozCercato, mozGuasto, mozExtraGuasto;
 
     private static synchronized Path moz() {
         if (mozGuasto) return null;
@@ -259,10 +326,23 @@ final class Motore {
 
     /** Codifica con cjpeg (MozJPEG): l'immagine entra come PPM dallo standard input, il JPEG esce dallo standard output. */
     static byte[] mozjpeg(BufferedImage img, int q, boolean progressivo) throws IOException {
+        return mozjpeg(img, q, new Altro(progressivo, false, false));
+    }
+
+    static byte[] mozjpeg(BufferedImage img, int q, Altro alt) throws IOException {
         Path exe = moz();
         if (exe == null) throw new IOException("cjpeg non trovato");
-        ProcessBuilder pb = new ProcessBuilder(exe.toString(), "-quality", String.valueOf(Math.max(1, Math.min(100, q))),
-                progressivo ? "-progressive" : "-baseline");
+        java.util.List<String> cmd = new java.util.ArrayList<>();
+        cmd.add(exe.toString());
+        cmd.add("-quality");
+        cmd.add(String.valueOf(Math.max(1, Math.min(100, q))));
+        cmd.add(alt.progressivo ? "-progressive" : "-baseline");
+        if (alt.grigio) cmd.add("-grayscale");
+        else if (alt.croma444) {
+            cmd.add("-sample");
+            cmd.add("1x1");
+        }
+        ProcessBuilder pb = new ProcessBuilder(cmd);
         pb.redirectError(ProcessBuilder.Redirect.DISCARD);
         Process p = pb.start();
         final int w = img.getWidth(), h = img.getHeight();
@@ -337,6 +417,11 @@ final class Motore {
     }
 
     static byte[] jpeg(BufferedImage img, int q, boolean progressivo) throws IOException {
+        return jpeg(img, q, progressivo, false);
+    }
+
+    /** JPEG di Java. croma444: i colori a piena risoluzione (di base sono a metà: più leggero, ma i bordi colorati sfumano). */
+    static byte[] jpeg(BufferedImage img, int q, boolean progressivo, boolean croma444) throws IOException {
         ImageWriter w = ImageIO.getImageWritersByFormatName("jpeg").next();
         try {
             JPEGImageWriteParam pr = (JPEGImageWriteParam) w.getDefaultWriteParam();
@@ -347,7 +432,8 @@ final class Motore {
             ByteArrayOutputStream bo = new ByteArrayOutputStream(1 << 16);
             try (ImageOutputStream ios = ImageIO.createImageOutputStream(bo)) {
                 w.setOutput(ios);
-                w.write(null, new IIOImage(img, null, null), pr);
+                IIOMetadata md = croma444 && img.getRaster().getNumBands() >= 3 ? metadatiCroma444(w, img, pr) : null;
+                w.write(null, new IIOImage(img, null, md), pr);
             }
             return bo.toByteArray();
         } finally {
@@ -355,9 +441,50 @@ final class Motore {
         }
     }
 
+    /** Metadati del JPEG con tutti i canali a campionamento 1x1 (4:4:4). */
+    private static IIOMetadata metadatiCroma444(ImageWriter w, BufferedImage img, ImageWriteParam pr) {
+        IIOMetadata md = w.getDefaultImageMetadata(ImageTypeSpecifier.createFromRenderedImage(img), pr);
+        String fmt = "javax_imageio_jpeg_image_1.0";
+        Node radice = md.getAsTree(fmt);
+        if (imposta1x1(radice)) {
+            try {
+                md.setFromTree(fmt, radice);
+            } catch (javax.imageio.metadata.IIOInvalidTreeException e) {
+                Cfg.err("metadati JPEG 4:4:4", e);
+            }
+        }
+        return md;
+    }
+
+    private static boolean imposta1x1(Node n) {
+        boolean fatto = false;
+        if ("componentSpec".equals(n.getNodeName()) && n instanceof IIOMetadataNode) {
+            ((IIOMetadataNode) n).setAttribute("HsamplingFactor", "1");
+            ((IIOMetadataNode) n).setAttribute("VsamplingFactor", "1");
+            fatto = true;
+        }
+        for (Node c = n.getFirstChild(); c != null; c = c.getNextSibling()) fatto |= imposta1x1(c);
+        return fatto;
+    }
+
     static BufferedImage decodifica(byte[] d) throws IOException {
         BufferedImage im = ImageIO.read(new ByteArrayInputStream(d));
         if (im == null) throw new IOException("anteprima non leggibile");
+        // un JPEG in bianco e nero ha un solo canale: Java lo converte "a modo suo" e lo schiarisce.
+        // Qui i valori restano quelli del file, così l'anteprima è identica a ciò che si salva.
+        if (im.getRaster().getNumBands() == 1 && im.getColorModel().getColorSpace().getType() == java.awt.color.ColorSpace.TYPE_GRAY) {
+            BufferedImage o = new BufferedImage(im.getWidth(), im.getHeight(), BufferedImage.TYPE_INT_RGB);
+            java.awt.image.Raster r = im.getRaster();
+            int[] riga = new int[im.getWidth()];
+            for (int y = 0; y < im.getHeight(); y++) {
+                for (int x = 0; x < riga.length; x++) {
+                    int v = r.getSample(x, y, 0) & 255;
+                    riga[x] = (v << 16) | (v << 8) | v;
+                }
+                o.setRGB(0, y, riga.length, 1, riga, 0, riga.length);
+            }
+            return o;
+        }
         return im;
     }
 

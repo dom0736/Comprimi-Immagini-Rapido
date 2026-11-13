@@ -19,9 +19,10 @@ Comprimi, ridimensiona e ritaglia le tue immagini con un'anteprima prima/dopo in
 
 - **Trascina e basta**: immagini o cartelle intere nella finestra (oppure **Aggiungi**, oppure **Ctrl+V** per incollare uno screenshot).
 - **Anteprima prima/dopo**: una linea che si trascina divide l'originale dalla versione compressa. Sotto vedi peso prima → dopo e la percentuale risparmiata.
-- **Quattro qualità pronte** (Minima, Leggera, Normale, Nitida) e due cursori per regolare **qualità** e **dimensione** a mano.
+- **Quattro qualità pronte** (Minima, Leggera, Normale, Nitida) e un cursore per regolare la **qualità** a mano.
 - **Prima di tutto l'immagine**: il pulsante a destra nell'intestazione (o `F`) nasconde l'elenco e lascia l'anteprima grande; **schermo intero** con `F11`.
-- **Tre formati**: **JPEG** (foto, con [MozJPEG](https://github.com/mozilla/mozjpeg) se presente), **PNG** (senza perdita, con trasparenze) e **PNG 256** (256 colori, molto più leggero per screenshot e grafica). Si scelgono dalla tendina accanto ai cursori.
+- **Tre formati**: **JPEG** (foto, con [MozJPEG](https://github.com/mozilla/mozjpeg) se presente), **PNG** (senza perdita, con trasparenze) e **PNG 256** (256 colori, molto più leggero per screenshot e grafica). Si scelgono dalla tendina nella sezione **Altro**.
+- **Sezione Altro** (chiusa di base, con un riassunto di ciò che hai scelto): **formato**, **Ridimensiona** (spenta di base: attiva il cursore della dimensione, così non si rimpicciolisce una foto per sbaglio), **Progressivo**, **Bianco e nero** e **Dettaglio colore** (Standard o Pieno) per il JPEG.
 - **Ritaglio** direttamente sull'immagine, per ogni foto.
 - **Comprimi tutto** con barra di avanzamento e riepilogo finale; **Salva**, **Copia file** e **Copia immagine** per una sola foto.
 - **Foto del telefono raddrizzate** (legge l'orientamento EXIF) e **metadati rimossi** (niente posizione GPS nelle foto condivise).
@@ -41,7 +42,7 @@ Non serve installare Java: è già dentro.
 ## 🧭 Guida rapida
 
 1. **Aggiungi** le immagini: trascinale nella finestra, premi *Aggiungi* o *Ctrl+V*.
-2. **Scegli come comprimere**: *Minima*, *Leggera*, *Normale* o *Nitida*, oppure muovi i cursori.
+2. **Scegli come comprimere**: *Minima*, *Leggera*, *Normale* o *Nitida*, oppure muovi il cursore della qualità. Formato, dimensione e le altre opzioni sono in *Altro*; per rimpicciolire anche la foto spunta *Ridimensiona*.
 3. **Controlla** il risultato spostando la linea sull'anteprima.
 4. **Salva**: *Comprimi tutto* per l'intero elenco, *Salva* per quella selezionata.
 
@@ -51,6 +52,8 @@ Non serve installare Java: è già dentro.
 | Leggera | 65 | 50% | Siti e documenti |
 | Normale | 75 | 75% | Va bene quasi sempre |
 | Nitida | 90 | 100% | Meno peso senza rimpicciolire la foto |
+
+Minima, Leggera e Normale accendono da sole *Ridimensiona*; Nitida la spegne. Il ridimensionamento si può sempre attivare o disattivare a mano con la spunta.
 
 ### Dove vanno i file
 
