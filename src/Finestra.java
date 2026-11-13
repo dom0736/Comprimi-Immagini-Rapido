@@ -206,7 +206,7 @@ final class Finestra extends JFrame {
         int qe = (int) Math.round(qw * (1 - f));
         coda.setVisible(qe > 24);
         coda.setBounds(m, hh, Math.max(qe, 0), bodyH);
-        int rx = m + (int) Math.round((qw + 16) * (1 - f)), rw = W - rx - m, ch = (int) Math.round(172 - 92 * f + ALTRO_EXTRA * altro.get() * (1 - f));
+        int rx = m + (int) Math.round((qw + 16) * (1 - f)), rw = W - rx - m, ch = (int) Math.round(172 - 92 * f + (ALTRO_EXTRA + (altroStretto(rw) ? ALTRO_EXTRA_STRETTO : 0)) * altro.get() * (1 - f));
         int gp = (int) Math.round(14 - 6 * f);
         confrontoWrap.setBounds(rx, hh, rw, bodyH - ch - gp);
         controlli.setBounds(rx, hh + bodyH - ch, rw, ch);
@@ -457,6 +457,12 @@ final class Finestra extends JFrame {
 
     // ---------------------------------------------------------------- controlli
     static final int ALTRO_EXTRA = 112; // quanto cresce la card dei controlli quando «Altro» è aperto
+    static final int ALTRO_EXTRA_STRETTO = 40; // in più quando la card è stretta e le opzioni vanno su due righe
+
+    /** Sotto questa larghezza della card le opzioni di «Altro» non stanno più su una riga sola. */
+    static boolean altroStretto(int larghezzaCard) {
+        return larghezzaCard < 650;
+    }
 
     /** Quanto «Altro» è aperto (0 = chiuso, 1 = aperto): fa crescere la card verso l'alto. */
     private final Anim.Val altro = new Anim.Val(0, () -> {
@@ -516,6 +522,8 @@ final class Finestra extends JFrame {
         final TestaSezione testa;
         final AltroPannello pannello = new AltroPannello();
         final Bott salva, copiaFile, copiaImg, tutto;
+        private final int[] larghPiene = new int[3]; // larghezza dei bottoni con il testo, misurata prima di toglierlo
+        private boolean soloIcone;
 
         ControlliCard() {
             setLayout(null);
@@ -551,6 +559,7 @@ final class Finestra extends JFrame {
             }
             tutto.alt = 44;
             tutto.fs = 14;
+            for (int i = 0; i < 3; i++) larghPiene[i] = new Bott[]{salva, copiaFile, copiaImg}[i].getPreferredSize().width;
             for (JComponent c : new JComponent[]{ridimensiona, dimensione, formato, progressivo, grigio, croma}) pannello.add(c); // la spunta sta sopra al cursore
             for (JComponent c : new JComponent[]{preset, qualita, testa, pannello, salva, copiaFile, copiaImg, tutto}) add(c);
             aggiornaAltro();
@@ -611,18 +620,28 @@ final class Finestra extends JFrame {
         void setCompatto(boolean c) {
             if (c == compatto) return;
             compatto = c;
-            salva.setTesto(c ? "" : "Salva");
-            copiaFile.setTesto(c ? "" : "Copia file");
-            copiaImg.setTesto(c ? "" : "Copia immagine");
-            salva.setToolTipText(c ? "Salva (Ctrl+S)" : null);
-            copiaFile.setToolTipText(c ? "Copia file" : null);
-            copiaImg.setToolTipText(c ? "Copia immagine" : null);
+            testiBottoni(c || stretto);
             vis.jump(.3);
             vis.to(1, 260);
             revalidate();
         }
 
+        private boolean stretto;
+
+        /** Salva / Copia file / Copia immagine: con il testo o, se manca posto, solo icona (con tooltip). */
+        private void testiBottoni(boolean soloIc) {
+            if (soloIc == soloIcone) return;
+            soloIcone = soloIc;
+            salva.setTesto(soloIc ? "" : "Salva");
+            copiaFile.setTesto(soloIc ? "" : "Copia file");
+            copiaImg.setTesto(soloIc ? "" : "Copia immagine");
+            salva.setToolTipText(soloIc ? "Salva (Ctrl+S)" : null);
+            copiaFile.setToolTipText(soloIc ? "Copia file" : null);
+            copiaImg.setToolTipText(soloIc ? "Copia immagine" : null);
+        }
+
         private void layoutCompatto() {
+            testiBottoni(true);
             int w = getWidth(), h = getHeight(), m = 18;
             int y = (h - 36) / 2;
             int tw = 140;
@@ -668,13 +687,17 @@ final class Finestra extends JFrame {
             pannello.setVisible(altro.get() > .01);
             pannello.setBounds(0, py, w, Math.max(0, y - 6 - py));
             layoutAltro(cw, gap, m);
+            int tw = Math.max(176, tutto.getPreferredSize().width);
+            int pieni = larghPiene[0] + larghPiene[1] + larghPiene[2] + 16;
+            stretto = pieni > w - 2 * m - tw - 14; // i tre bottoni col testo non stanno accanto a «Comprimi tutto»
+            testiBottoni(stretto);
             int x = m;
-            for (Bott b : new Bott[]{salva, copiaFile, copiaImg}) {
-                int bw = b.getPreferredSize().width;
+            for (int i = 0; i < 3; i++) {
+                Bott b = new Bott[]{salva, copiaFile, copiaImg}[i];
+                int bw = soloIcone ? 36 : larghPiene[i];
                 b.setBounds(x, y + 4, bw, 36);
                 x += bw + 8;
             }
-            int tw = Math.max(176, tutto.getPreferredSize().width);
             tutto.setBounds(w - m - tw, y, tw, 44);
         }
 
@@ -689,7 +712,11 @@ final class Finestra extends JFrame {
             progressivo.setBounds(xl + 10, y2 + 8, progressivo.getPreferredSize().width, 20);
             grigio.setBounds(xl + 10 + progressivo.getWidth() + 28, y2 + 8, grigio.getPreferredSize().width, 20);
             int lw = getFontMetrics(Tema.f(12.5f)).stringWidth("Dettaglio colore");
-            croma.setBounds(xr + 10 + lw + 12, y2 + 2, croma.getPreferredSize().width, 32);
+            if (altroStretto(getWidth())) { // card stretta: «Dettaglio colore» va sulla riga sotto
+                croma.setBounds(xl + 10 + lw + 12, y2 + 38, croma.getPreferredSize().width, 32);
+            } else {
+                croma.setBounds(xr + 10 + lw + 12, y2 + 2, croma.getPreferredSize().width, 32);
+            }
         }
 
         @Override
